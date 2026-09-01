@@ -1,0 +1,94 @@
+extends Control
+## Boot — two-button mode select (D / E). No other menus.
+
+const INK := Color("1C1C1C")
+const BG := Color("F4E8D0")
+const CORAL := Color("E85D4C")
+const TEAL := Color("2A9D8F")
+const MUSTARD := Color("E9C46A")
+
+func _ready() -> void:
+	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+
+	var bg := ColorRect.new()
+	bg.color = BG
+	bg.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(bg)
+
+	var title := Label.new()
+	title.text = "GROK BOT"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	title.offset_top = 280.0
+	title.offset_bottom = 400.0
+	title.add_theme_font_size_override("font_size", 72)
+	title.add_theme_color_override("font_color", INK)
+	add_child(title)
+
+	_add_mode_button(
+		"D",
+		"抽層",
+		CORAL,
+		Rect2(110, 720, 860, 280),
+		_open_d
+	)
+	_add_mode_button(
+		"E",
+		"相位咬合",
+		TEAL,
+		Rect2(110, 1080, 860, 280),
+		_open_e
+	)
+
+
+func _add_mode_button(letter: String, caption: String, color: Color, rect: Rect2, cb: Callable) -> void:
+	var btn := Button.new()
+	btn.position = rect.position
+	btn.size = rect.size
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.text = ""
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.corner_radius_top_left = 28
+	sb.corner_radius_top_right = 28
+	sb.corner_radius_bottom_left = 28
+	sb.corner_radius_bottom_right = 28
+	btn.add_theme_stylebox_override("normal", sb)
+	var sb_h := sb.duplicate() as StyleBoxFlat
+	sb_h.bg_color = color.lightened(0.12)
+	btn.add_theme_stylebox_override("hover", sb_h)
+	btn.add_theme_stylebox_override("pressed", sb_h)
+	btn.pressed.connect(cb)
+	add_child(btn)
+
+	var letter_l := Label.new()
+	letter_l.text = letter
+	letter_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	letter_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	letter_l.position = Vector2(0, 24)
+	letter_l.size = Vector2(rect.size.x, 150)
+	letter_l.add_theme_font_size_override("font_size", 96)
+	letter_l.add_theme_color_override("font_color", Color.WHITE)
+	letter_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(letter_l)
+
+	var cap_l := Label.new()
+	cap_l.text = caption
+	cap_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cap_l.position = Vector2(0, 170)
+	cap_l.size = Vector2(rect.size.x, 80)
+	cap_l.add_theme_font_size_override("font_size", 36)
+	cap_l.add_theme_color_override("font_color", Color.WHITE)
+	cap_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(cap_l)
+
+
+func _open_d() -> void:
+	get_tree().change_scene_to_file("res://ModeD.tscn")
+
+
+func _open_e() -> void:
+	get_tree().change_scene_to_file("res://ModeE.tscn")
