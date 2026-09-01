@@ -8,6 +8,7 @@ const TEAL := Color("2A9D8F")
 const MUSTARD := Color("E9C46A")
 
 func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
 	var bg := ColorRect.new()
@@ -92,3 +93,31 @@ func _open_d() -> void:
 
 func _open_e() -> void:
 	get_tree().change_scene_to_file("res://ModeE.tscn")
+
+
+func _gui_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton:
+		var mb := event as InputEventMouseButton
+		if not (mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT):
+			return
+		_tap_at(mb.position)
+	elif event is InputEventScreenTouch:
+		var st := event as InputEventScreenTouch
+		if st.pressed:
+			_tap_at(st.position)
+
+
+func _input(event: InputEvent) -> void:
+	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_D or event.keycode == KEY_1:
+			_open_d()
+		elif event.keycode == KEY_E or event.keycode == KEY_2:
+			_open_e()
+
+
+func _tap_at(pos: Vector2) -> void:
+	# Fallback if Button.pressed does not fire (stretch / Android).
+	if Rect2(110, 720, 860, 280).has_point(pos):
+		_open_d()
+	elif Rect2(110, 1080, 860, 280).has_point(pos):
+		_open_e()
