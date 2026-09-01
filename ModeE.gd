@@ -1,7 +1,5 @@
 extends Control
-## Mode E — 相位咬合 Phase Snap
-## Whole-screen tap samples the circle's current rotation vs nearest window.
-## Placeholder = circle + arcs (drawn). Tweens only.
+## Mode E — 相位咬合. 8-level chapter then 90s endless. Tweens only.
 
 const INK := Color("1C1C1C")
 const BG := Color("F4E8D0")
@@ -27,11 +25,28 @@ const FAIL_RED := Color("E85D4C")
 @export var bounce_deg: float = 14.0
 @export var run_seconds: float = 90.0
 
+# period, inner°, outer°, docks to clear. 关7/8 sized so perfect window ≥ 90ms.
+const LEVELS: Array[Dictionary] = [
+	{"period": 2.2, "inner": 16.0, "outer": 36.0, "goal": 12},
+	{"period": 2.0, "inner": 14.0, "outer": 32.0, "goal": 16},
+	{"period": 1.8, "inner": 12.0, "outer": 28.0, "goal": 20},
+	{"period": 1.65, "inner": 12.0, "outer": 26.0, "goal": 24},
+	{"period": 1.5, "inner": 12.0, "outer": 24.0, "goal": 28},
+	{"period": 1.42, "inner": 12.0, "outer": 23.0, "goal": 32},
+	{"period": 1.35, "inner": 12.0, "outer": 22.0, "goal": 36},
+	{"period": 1.3, "inner": 14.0, "outer": 24.0, "goal": 40},
+]
+
 var _period: float = 1.8
 var _score: int = 0
 var _combo: int = 0
 var _time_left: float = 90.0
 var _success_docks: int = 0
+var _level_docks: int = 0
+var _goal: int = 12
+var _level: int = 0
+var _endless: bool = false
+var _cleared: bool = false
 var _busy: bool = false
 var _ended: bool = false
 var _restarting: bool = false
@@ -68,7 +83,6 @@ class Rotor extends Node2D:
 		draw_circle(Vector2.ZERO, r, Color(ink.r, ink.g, ink.b, 0.10))
 		draw_arc(Vector2.ZERO, r, 0.0, TAU, 96, ink, 5.0, true)
 		for i in window_count:
-			# Local 0° = up. Godot 0 rad = right, so offset -90°.
 			var mid := deg_to_rad(float(i) * (360.0 / float(window_count)) - 90.0)
 			var ho := deg_to_rad(outer_deg)
 			var hi := deg_to_rad(inner_deg)
@@ -104,24 +118,26 @@ class SnapTick extends Node2D:
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	_period = rotation_period
-	_time_left = run_seconds
+	_level = int(Engine.get_meta("e_level", 0))
+	_endless = bool(Engine.get_meta("e_endless", false))
+	_apply_level()
 	var short_side := minf(view_width, view_height)
 	_radius = short_side * circle_diameter_frac * 0.5
 	_build_ui()
+	_apply_rotor_windows()
 
 
 func _process(delta: float) -> void:
 	if _ended:
 		return
-	_time_left -= delta
-	if _time_left <= 0.0:
-		_time_left = 0.0
-		_end_run()
-		_refresh_hud()
-		return
+	if _endless:
+		_time_left -= delta
+		if _time_left <= 0.0:
+			_time_left = 0.0
+			_fail_run()
+			_refresh_hud()
+			return
 	if not _busy:
-		# Clockwise in Godot 2D (Y-down). One revolution per _period seconds.
 		_rotor.rotation_degrees += (360.0 / _period) * delta
 	_refresh_hud()
 
@@ -190,10 +206,10 @@ func _build_ui() -> void:
 	hud_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(hud_bg)
 
-	_score_label = _make_hud_label(hud, Vector2(40, 40), Vector2(240, 110), HORIZONTAL_ALIGNMENT_LEFT)
-	_combo_label = _make_hud_label(hud, Vector2(300, 40), Vector2(240, 110), HORIZONTAL_ALIGNMENT_CENTER)
-	_block_label = _make_hud_label(hud, Vector2(540, 40), Vector2(240, 110), HORIZONTAL_ALIGNMENT_CENTER)
-	_time_label = _make_hud_label(hud, Vector2(800, 40), Vector2(240, 110), HORIZONTAL_ALIGNMENT_RIGHT)
+	_score_label = _make_hud_label(hud, Vector2(40, 40), Vector2(200, 110), HORIZONTAL_ALIGNMENT_LEFT)
+	_combo_label = _make_hud_label(hud, Vector2(250, 40), Vector2(200, 110), HORIZONTAL_ALIGNMENT_CENTER)
+	_block_label = _make_hud_label(hud, Vector2(460, 40), Vector2(220, 110), HORIZONTAL_ALIGNMENT_CENTER)
+	_time_label = _make_hud_label(hud, Vector2(700, 40), Vector2(340, 110), HORIZONTAL_ALIGNMENT_RIGHT)
 
 	var flash_layer := CanvasLayer.new()
 	flash_layer.layer = 20
@@ -250,7 +266,10 @@ func _refresh_hud() -> void:
 	_score_label.text = str(_score)
 	_combo_label.text = str(_combo)
 	_block_label.text = "%d/3" % _blocked_count()
-	_time_label.text = str(ceili(_time_left))
+	if _endless:
+		_time_label.text = str(ceili(_time_left))
+	else:
+		_time_label.text = "%d/8  %d/%d" % [_level + 1, _level_docks, _goal]
 
 
 func _angle_diff_deg(a: float, b: float) -> float:
@@ -258,8 +277,6 @@ func _angle_diff_deg(a: float, b: float) -> float:
 
 
 func _on_tap() -> void:
-	# Sample current rotation. Window i local game-angle = i * 120, 0 = up.
-	# World game-angle = rotor.rotation_degrees + i * 120. Snap target = 0 (tick).
 	var nearest_i := 0
 	var nearest_d := 999.0
 	for i in window_count:
@@ -268,7 +285,6 @@ func _on_tap() -> void:
 		if absf(d) < absf(nearest_d):
 			nearest_d = d
 			nearest_i = i
-
 	var ad := absf(nearest_d)
 	if ad <= window_inner_deg and not _blocked[nearest_i]:
 		await _do_perfect(nearest_i, nearest_d)
@@ -281,9 +297,10 @@ func _on_tap() -> void:
 func _register_success() -> void:
 	_score += 1
 	_success_docks += 1
-	if _success_docks % docks_per_speedup == 0:
-		_period = maxf(period_min, _period * period_scale)
+	_level_docks += 1
 	_refresh_hud()
+	if not _endless and _level_docks >= _goal:
+		_clear_level()
 
 
 func _do_perfect(_window_i: int, delta_deg: float) -> void:
@@ -293,7 +310,6 @@ func _do_perfect(_window_i: int, delta_deg: float) -> void:
 	_flash.color = Color(FLASH_WHITE, 0.78)
 	var flash_tw := create_tween()
 	flash_tw.tween_property(_flash, "color:a", 0.0, 0.14)
-
 	var target := _rotor.rotation_degrees - delta_deg
 	var tw := create_tween()
 	tw.tween_property(_rotor, "rotation_degrees", target, snap_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -306,7 +322,6 @@ func _do_dock(delta_deg: float) -> void:
 	_busy = true
 	_combo = 0
 	_register_success()
-	# Soft ease toward the window, no flash, combo reset.
 	var target := _rotor.rotation_degrees - delta_deg * 0.35
 	var tw := create_tween()
 	tw.tween_property(_rotor, "rotation_degrees", target, snap_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
@@ -323,29 +338,61 @@ func _do_miss(window_i: int, delta_deg: float) -> void:
 		_rotor.blocked = _blocked
 		_rotor.queue_redraw()
 	_refresh_hud()
-
-	var kick := bounce_deg
-	if delta_deg >= 0.0:
-		kick = bounce_deg
-	else:
-		kick = -bounce_deg
+	var kick := bounce_deg if delta_deg >= 0.0 else -bounce_deg
 	var target := _rotor.rotation_degrees + kick
 	var tw := create_tween()
 	tw.tween_property(_rotor, "rotation_degrees", target, bounce_duration).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 	await tw.finished
-
 	if _blocked_count() >= window_count:
-		_end_run()
+		_fail_run()
 		return
 	if not _ended:
 		_busy = false
 
 
-func _end_run() -> void:
+func _apply_level() -> void:
+	var idx := mini(_level, LEVELS.size() - 1)
+	var L: Dictionary = LEVELS[idx]
+	_period = float(L["period"])
+	window_inner_deg = float(L["inner"])
+	window_outer_deg = float(L["outer"])
+	_goal = int(L["goal"])
+	if _endless:
+		_time_left = run_seconds
+	else:
+		_time_left = 0.0
+
+
+func _apply_rotor_windows() -> void:
+	if _rotor == null:
+		return
+	_rotor.outer_deg = window_outer_deg
+	_rotor.inner_deg = window_inner_deg
+	_rotor.blocked = _blocked
+	_rotor.queue_redraw()
+
+
+func _clear_level() -> void:
 	if _ended:
 		return
 	_ended = true
+	_cleared = true
 	_busy = true
+	_overlay.color = Color(TEAL, 0.88)
+	if _level >= LEVELS.size() - 1:
+		_overlay_label.text = "無盡"
+	else:
+		_overlay_label.text = "%d/8" % (_level + 2)
+	_overlay.visible = true
+
+
+func _fail_run() -> void:
+	if _ended:
+		return
+	_ended = true
+	_cleared = false
+	_busy = true
+	_overlay.color = Color(FAIL_RED, 0.88)
 	_overlay_label.text = str(_score)
 	_overlay.visible = true
 
@@ -354,6 +401,12 @@ func _restart() -> void:
 	if _restarting:
 		return
 	_restarting = true
+	if _cleared:
+		if _level >= LEVELS.size() - 1:
+			Engine.set_meta("e_endless", true)
+		else:
+			Engine.set_meta("e_level", _level + 1)
+			Engine.set_meta("e_endless", false)
 	get_tree().reload_current_scene()
 
 
