@@ -145,4 +145,302 @@ func _build_ui() -> void:
 	flash_layer.add_child(_flash)
 
 	var ov_layer := CanvasLayer.new()
-	oov_layer := CanvasLayer.new()
+	ov_layer.layer = 30
+	add_child(ov_layer)
+	_overlay = ColorRect.new()
+	_overlay.color = Color(FAIL_RED, 0.88)
+	_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
+	_overlay.visible = false
+	_overlay.gui_input.connect(_on_overlay_input)
+	ov_layer.add_child(_overlay)
+
+	_overlay_label = Label.new()
+	_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_overlay_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overlay_label.add_theme_font_size_override("font_size", 64)
+	_overlay_label.add_theme_color_override("font_color", FLASH_WHITE)
+	_overlay_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay.add_child(_overlay_label)
+
+
+func _make_hud_label(host: Node, pos: Vector2, size: Vector2, align: HorizontalAlignment) -> Label:
+	var l := Label.new()
+	l.position = pos
+	l.size = size
+	l.horizontal_alignment = align
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.add_theme_font_size_override("font_size", 42)
+	l.add_theme_color_override("font_color", INK)
+	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(l)
+	return l
+
+
+func _refresh_hud() -> void:
+	_score_label.text = str(_score)
+	_combo_label.text = str(_combo)
+	_time_label.text = str(ceili(_time_left))
+
+
+func _band_y(band: int) -> float:
+	return _hud_h + float(band) * band_height + band_gap_px * 0.5
+
+
+func _band_from_y(y: float) -> int:
+	if y < _hud_h:
+		return -1
+	var play_h := float(band_count) * band_height
+	if y >= _hud_h + play_h:
+		return -1
+	if y >= view_height - view_height * bottom_frac:
+		return -1
+	return clampi(int((y - _hud_h) / band_height), 0, band_count - 1)
+
+
+func _crack_count_for_group(group: int) -> int:
+	# group 1 = 1 crack / 5 loose; 2–3 = 2/4; 4+ = 3/3
+	if group <= 1:
+		return 1
+	if group <= 3:
+		return 2
+	return 3
+
+
+func _spawn_group(first: bool) -> void:
+	_busy = true
+	_clear_layers()
+
+	var n_crack := _crack_count_for_group(_group_index)
+	var flags: Array[bool] = [false, false, false, false, false, false]
+	var slots: Array[int] = [0, 1, 2, 3, 4, 5]
+	slots.shuffle()
+	for i in n_crack:
+		flags[slots[i]] = true
+
+	var block_w := view_width * block_width_frac
+	var block_h := band_height - band_gap_px
+	var origin_x := (view_width - block_w) * 0.5
+	var start_offset := 0.0 if first else -900.0
+
+	for i in band_count:
+		var L := _make_layer(i, flags[i], LAYER_COLORS[i], Vector2(block_w, block_h))
+		L.position = Vector2(origin_x, _band_y(i) + start_offset)
+		_layer_host.add_child(L)
+		_layers.append(L)
+
+	if first:
+		_busy = false
+		return
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	for L in _layers:
+		var lb: LayerBlock = L
+		tw.tween_property(lb, "position:y", _band_y(lb.band), group_drop_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	await tw.finished
+	if not _ended:
+		_busy = false
+
+
+func _clear_layers() -> void:
+	for L in _layers:
+		if is_instance_valid(L):
+			(L as Node).queue_free()
+	_layers.clear()
+
+
+func _make_layer(band: int, is_crack: bool, color: Color, sz: Vector2) -> LayerBlock:
+	var L := LayerBlock.new()
+	L.band = band
+	L.is_crack = is_crack
+	L.block_size = sz
+	L.name = "Layer_%d" % band
+
+	var w := sz.x
+	var h := sz.y
+	var cut := crack_cut_px
+	var pts: PackedVector2Array
+	if is_crack:
+		# Missing top-right corner + ink notch (not a crack texture).
+		pts = PackedVector2Array([
+			Vector2(0, 0),
+			Vector2(w - cut, 0),
+			Vector2(w - cut, cut * 0.32),
+			Vector2(w - cut * 0.22, cut),
+			Vector2(w, cut),
+			Vector2(w, h),
+			Vector2(0, h),
+		])
+	else:
+		pts = PackedVector2Array([
+			Vector2(0, 0),
+			Vector2(w, 0),
+			Vector2(w, h),
+			Vector2(0, h),
+		])
+
+	var body := Polygon2D.new()
+	body.polygon = pts
+	body.color = color
+	L.add_child(body)
+
+	if is_crack:
+		var notch := Polygon2D.new()
+		notch.color = INK
+		notch.polygon = PackedVector2Array([
+			Vector2(w - cut, 0),
+			Vector2(w - cut + 28, 0),
+			Vector2(w - cut + 12, 24),
+			Vector2(w - cut, 20),
+		])
+		L.add_child(notch)
+
+	return L
+
+
+func _on_tap(pos: Vector2) -> void:
+	var band := _band_from_y(pos.y)
+	if band < 0:
+		return
+	var target: LayerBlock = null
+	for L in _layers:
+		var lb: LayerBlock = L
+		if lb.band == band:
+			target = lb
+			break
+	if target == null:
+		return
+	if target.is_crack:
+		_on_crack_hit()
+	else:
+		_on_loose_hit(target)
+
+
+func _on_loose_hit(layer: LayerBlock) -> void:
+	_busy = true
+	_score += 1
+	_combo += 1
+	_refresh_hud()
+
+	var tw := create_tween()
+	tw.set_parallel(true)
+	tw.tween_property(layer, "position:x", layer.position.x + view_width, pull_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+	tw.tween_property(layer, "modulate:a", 0.0, pull_duration)
+	await tw.finished
+	if _ended:
+		return
+
+	var vacated := layer.band
+	_layers.erase(layer)
+	if is_instance_valid(layer):
+		layer.queue_free()
+
+	# Layers above (smaller band index) tween down one slot.
+	var movers: Array = []
+	for L in _layers:
+		var lb: LayerBlock = L
+		if lb.band < vacated:
+			movers.append(lb)
+	if not movers.is_empty():
+		var drop := create_tween()
+		drop.set_parallel(true)
+		for L in movers:
+			var lb: LayerBlock = L
+			lb.band += 1
+			drop.tween_property(lb, "position:y", _band_y(lb.band), drop_duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		await drop.finished
+		if _ended:
+			return
+
+	if _count_loose() == 0:
+		await get_tree().create_timer(next_group_delay).timeout
+		if _ended:
+			return
+		await _retire_and_next_group()
+		return
+
+	_busy = false
+
+
+func _count_loose() -> int:
+	var n := 0
+	for L in _layers:
+		if not (L as LayerBlock).is_crack:
+			n += 1
+	return n
+
+
+func _retire_and_next_group() -> void:
+	# Remaining cracks tween off, then a new 6-layer group drops in.
+	if not _layers.is_empty():
+		var tw := create_tween()
+		tw.set_parallel(true)
+		for L in _layers:
+			var lb: LayerBlock = L
+			tw.tween_property(lb, "position:y", lb.position.y + 1400.0, 0.28).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+			tw.tween_property(lb, "modulate:a", 0.0, 0.28)
+		await tw.finished
+		if _ended:
+			return
+	_group_index += 1
+	await _spawn_group(false)
+
+
+func _on_crack_hit() -> void:
+	if _ended:
+		return
+	_ended = true
+	_busy = true
+	# Brighter red collapse flash, then layers fall/rotate with tweens (not physics).
+	_flash.color = Color(COLLAPSE_RED, 0.72)
+	var flash_tw := create_tween()
+	flash_tw.tween_property(_flash, "color:a", 0.0, 0.35)
+	await _play_collapse()
+	_show_overlay()
+
+
+func _play_collapse() -> void:
+	if _layers.is_empty():
+		return
+	var tw := create_tween()
+	tw.set_parallel(true)
+	var i := 0
+	for L in _layers:
+		var lb: LayerBlock = L
+		var delay := 0.04 * float(i)
+		var fall_y := lb.position.y + 1100.0 + float(i) * 40.0
+		var rot := randf_range(-0.9, 0.9)
+		var drift := lb.position.x + randf_range(-80.0, 80.0)
+		tw.tween_property(lb, "position:y", fall_y, collapse_duration).set_delay(delay).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN)
+		tw.tween_property(lb, "position:x", drift, collapse_duration).set_delay(delay)
+		tw.tween_property(lb, "rotation", rot, collapse_duration).set_delay(delay)
+		tw.tween_property(lb, "modulate:a", 0.25, collapse_duration).set_delay(delay)
+		i += 1
+	await tw.finished
+
+
+func _end_timeout() -> void:
+	if _ended:
+		return
+	_ended = true
+	_busy = true
+	_show_overlay()
+
+
+func _show_overlay() -> void:
+	_overlay_label.text = str(_score)
+	_overlay.visible = true
+
+
+func _restart() -> void:
+	if _restarting:
+		return
+	_restarting = true
+	get_tree().reload_current_scene()
+
+
+func _on_overlay_input(event: InputEvent) -> void:
+	if _ended and _is_press(event):
+		_restart()
