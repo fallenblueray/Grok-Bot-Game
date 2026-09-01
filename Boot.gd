@@ -1,5 +1,5 @@
 extends Control
-## Boot — two-button mode select (D / E). No other menus.
+## Boot — E is the game. D is a corpse (KEY_D still opens it).
 
 const INK := Color("1C1C1C")
 const BG := Color("F4E8D0")
@@ -28,17 +28,10 @@ func _ready() -> void:
 	add_child(title)
 
 	_add_mode_button(
-		"D",
-		"抽層",
-		CORAL,
-		Rect2(110, 720, 860, 280),
-		_open_d
-	)
-	_add_mode_button(
 		"E",
 		"相位咬合",
 		TEAL,
-		Rect2(110, 1080, 860, 280),
+		Rect2(110, 820, 860, 320),
 		_open_e
 	)
 
@@ -92,6 +85,8 @@ func _open_d() -> void:
 
 
 func _open_e() -> void:
+	Engine.set_meta("e_level", 0)
+	Engine.set_meta("e_endless", false)
 	get_tree().change_scene_to_file("res://ModeE.tscn")
 
 
@@ -116,8 +111,5 @@ func _input(event: InputEvent) -> void:
 
 
 func _tap_at(pos: Vector2) -> void:
-	# Fallback if Button.pressed does not fire (stretch / Android).
-	if Rect2(110, 720, 860, 280).has_point(pos):
-		_open_d()
-	elif Rect2(110, 1080, 860, 280).has_point(pos):
+	if Rect2(110, 820, 860, 320).has_point(pos):
 		_open_e()
