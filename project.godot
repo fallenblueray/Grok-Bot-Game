@@ -1,0 +1,26 @@
+; Engine configuration file.
+; Godot 4.3 prototype — Grok Bot Game (Mode D 抽層 / Mode E 相位咬合)
+config_version=5
+
+[application]
+
+config/name="Grok Bot Game"
+config/description="Playable Godot 4 prototype: Mode D Pull Layer, Mode E Phase Snap. One-thumb tap, portrait 1080x1920."
+run/main_scene="res://Boot.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+
+[display]
+
+window/size/viewport_width=1080
+window/size/viewport_height=1920
+window/size/window_width_override=540
+window/size/window_height_override=960
+window/stretch/mode="canvas_items"
+window/stretch/aspect="keep"
+window/handheld/orientation=1
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.956863, 0.909804, 0.815686, 1)
