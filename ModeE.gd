@@ -102,6 +102,7 @@ class SnapTick extends Node2D:
 
 
 func _ready() -> void:
+	mouse_filter = Control.MOUSE_FILTER_IGNORE
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_period = rotation_period
 	_time_left = run_seconds
@@ -125,7 +126,7 @@ func _process(delta: float) -> void:
 	_refresh_hud()
 
 
-func _unhandled_input(event: InputEvent) -> void:
+func _input(event: InputEvent) -> void:
 	if not _is_press(event):
 		return
 	get_viewport().set_input_as_handled()
@@ -143,6 +144,11 @@ func _is_press(event: InputEvent) -> bool:
 		return mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT
 	if event is InputEventScreenTouch:
 		return (event as InputEventScreenTouch).pressed
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if not k.pressed or k.echo:
+			return false
+		return k.keycode == KEY_SPACE or k.keycode == KEY_ENTER or k.keycode == KEY_KP_ENTER
 	return false
 
 
