@@ -7,6 +7,21 @@ const CORAL := Color("E85D4C")
 const TEAL := Color("2A9D8F")
 const MUSTARD := Color("E9C46A")
 
+var _font: Font
+
+
+func _cjk_font() -> Font:
+	if _font != null:
+		return _font
+	var f := SystemFont.new()
+	f.font_names = PackedStringArray([
+		"Noto Sans CJK TC", "Noto Sans CJK", "Noto Sans TC",
+		"PingFang TC", "Microsoft JhengHei", "Source Han Sans TC", "sans-serif",
+	])
+	_font = f
+	return _font
+
+
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -23,6 +38,7 @@ func _ready() -> void:
 	title.set_anchors_preset(Control.PRESET_TOP_WIDE)
 	title.offset_top = 280.0
 	title.offset_bottom = 400.0
+	title.add_theme_font_override("font", _cjk_font())
 	title.add_theme_font_size_override("font_size", 72)
 	title.add_theme_color_override("font_color", INK)
 	add_child(title)
@@ -63,6 +79,7 @@ func _add_mode_button(letter: String, caption: String, color: Color, rect: Rect2
 	letter_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	letter_l.position = Vector2(0, 24)
 	letter_l.size = Vector2(rect.size.x, 150)
+	letter_l.add_theme_font_override("font", _cjk_font())
 	letter_l.add_theme_font_size_override("font_size", 96)
 	letter_l.add_theme_color_override("font_color", Color.WHITE)
 	letter_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -74,6 +91,7 @@ func _add_mode_button(letter: String, caption: String, color: Color, rect: Rect2
 	cap_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	cap_l.position = Vector2(0, 170)
 	cap_l.size = Vector2(rect.size.x, 80)
+	cap_l.add_theme_font_override("font", _cjk_font())
 	cap_l.add_theme_font_size_override("font_size", 36)
 	cap_l.add_theme_color_override("font_color", Color.WHITE)
 	cap_l.mouse_filter = Control.MOUSE_FILTER_IGNORE

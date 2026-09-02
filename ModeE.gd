@@ -25,7 +25,7 @@ const FAIL_RED := Color("E85D4C")
 @export var bounce_deg: float = 14.0
 @export var run_seconds: float = 90.0
 
-# period, inner°, outer°, docks to clear. 关7/8 sized so perfect window ≥ 90ms.
+# period, inner°, outer°, docks to clear. 共7/8 sized so perfect window ≥ 90ms.
 const LEVELS: Array[Dictionary] = [
 	{"period": 2.2, "inner": 16.0, "outer": 36.0, "goal": 12},
 	{"period": 2.0, "inner": 14.0, "outer": 32.0, "goal": 16},
@@ -51,17 +51,32 @@ var _busy: bool = false
 var _ended: bool = false
 var _restarting: bool = false
 var _blocked: Array[bool] = [false, false, false]
+var _font: Font
 
 var _score_label: Label
 var _combo_label: Label
-var _time_label: Label
 var _block_label: Label
+var _level_label: Label
+var _docks_label: Label
 var _overlay: ColorRect
 var _overlay_label: Label
+var _overlay_hint: Label
 var _flash: ColorRect
 var _rotor: Rotor
 var _tick: SnapTick
 var _radius: float = 388.8
+
+
+func _cjk_font() -> Font:
+	if _font != null:
+		return _font
+	var f := SystemFont.new()
+	f.font_names = PackedStringArray([
+		"Noto Sans CJK TC", "Noto Sans CJK", "Noto Sans TC",
+		"PingFang TC", "Microsoft JhengHei", "Source Han Sans TC", "sans-serif",
+	])
+	_font = f
+	return _font
 
 
 class Rotor extends Node2D:
@@ -72,6 +87,22 @@ class Rotor extends Node2D:
 	var blocked: Array[bool] = [false, false, false]
 	var window_count: int = 3
 
+	func _band(r_in: float, r_out: float, a0: float, a1: float, color: Color, steps: int = 20) -> void:
+		for s in steps:
+			var t0 := float(s) / float(steps)
+			var t1 := float(s + 1) / float(steps)
+			var A := lerpf(a0, a1, t0)
+			var B := lerpf(a0, a1, t1)
+			draw_colored_polygon(
+				PackedVector2Array([
+					Vector2(cos(A), sin(A)) * r_out,
+					Vector2(cos(B), sin(B)) * r_out,
+					Vector2(cos(B), sin(B)) * r_in,
+					Vector2(cos(A), sin(A)) * r_in,
+				]),
+				color
+			)
+
 	func _draw() -> void:
 		var ink := Color("1C1C1C")
 		var coral := Color("E85D4C")
@@ -79,22 +110,24 @@ class Rotor extends Node2D:
 		var white := Color("FFFFFF")
 		var r := radius
 		var thick := r * thick_frac
-		var arc_r := r - thick * 0.55
-		draw_circle(Vector2.ZERO, r, Color(ink.r, ink.g, ink.b, 0.10))
-		draw_arc(Vector2.ZERO, r, 0.0, TAU, 96, ink, 5.0, true)
+		var r_out := r - 3.0
+		var r_in := r_out - thick
+		draw_circle(Vector2.ZERO, r, Color(ink.r, ink.g, ink.b, 0.22))
+		draw_arc(Vector2.ZERO, r, 0.0, TAU, 96, ink, 6.0, true)
 		for i in window_count:
 			var mid := deg_to_rad(float(i) * (360.0 / float(window_count)) - 90.0)
 			var ho := deg_to_rad(outer_deg)
 			var hi := deg_to_rad(inner_deg)
 			if blocked[i]:
-				var c := coral
-				c.a = 0.40
-				draw_arc(Vector2.ZERO, arc_r, mid - ho, mid + ho, 36, c, thick, true)
+				coral.a = 0.88
+				_band(r_in, r_out, mid - ho, mid + ho, coral)
 			else:
-				var tcol := teal
-				tcol.a = 0.50
-				draw_arc(Vector2.ZERO, arc_r, mid - ho, mid + ho, 36, tcol, thick, true)
-				draw_arc(Vector2.ZERO, arc_r, mid - hi, mid + hi, 28, white, thick * 0.72, true)
+				teal.a = 1.0
+				_band(r_in, r_out, mid - ho, mid + ho, teal)
+				var ink_edge := Color(ink, 1.0)
+				var r_white_in := r_out - thick * 0.62
+				_band(r_white_in - 6.0, r_out, mid - hi, mid + hi, ink_edge)
+				_band(r_white_in, r_out - 3.0, mid - hi, mid + hi, white)
 
 
 class SnapTick extends Node2D:
@@ -102,14 +135,14 @@ class SnapTick extends Node2D:
 
 	func _draw() -> void:
 		var ink := Color("1C1C1C")
-		var y0 := -radius - 8.0
-		var y1 := -radius - 44.0
+		var y0 := -radius - 22.0
+		var y1 := -radius - 78.0
 		draw_line(Vector2(0, y0), Vector2(0, y1), ink, 8.0, true)
 		draw_colored_polygon(
 			PackedVector2Array([
-				Vector2(-14, y1),
-				Vector2(14, y1),
-				Vector2(0, y1 - 22),
+				Vector2(-16, y1),
+				Vector2(16, y1),
+				Vector2(0, y1 - 24),
 			]),
 			ink
 		)
@@ -199,17 +232,20 @@ func _build_ui() -> void:
 	hud.layer = 10
 	add_child(hud)
 
+	var hud_h := view_height * 0.10
 	var hud_bg := ColorRect.new()
 	hud_bg.color = Color(BG, 0.92)
 	hud_bg.position = Vector2.ZERO
-	hud_bg.size = Vector2(view_width, view_height * 0.10)
+	hud_bg.size = Vector2(view_width, hud_h)
 	hud_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	hud.add_child(hud_bg)
 
-	_score_label = _make_hud_label(hud, Vector2(40, 40), Vector2(200, 110), HORIZONTAL_ALIGNMENT_LEFT)
-	_combo_label = _make_hud_label(hud, Vector2(250, 40), Vector2(200, 110), HORIZONTAL_ALIGNMENT_CENTER)
-	_block_label = _make_hud_label(hud, Vector2(460, 40), Vector2(220, 110), HORIZONTAL_ALIGNMENT_CENTER)
-	_time_label = _make_hud_label(hud, Vector2(700, 40), Vector2(340, 110), HORIZONTAL_ALIGNMENT_RIGHT)
+	var col_w := view_width / 5.0
+	_score_label = _make_hud_cell(hud, 0.0, col_w, "分")
+	_combo_label = _make_hud_cell(hud, col_w, col_w, "連")
+	_block_label = _make_hud_cell(hud, col_w * 2.0, col_w, "堵")
+	_level_label = _make_hud_cell(hud, col_w * 3.0, col_w, "關")
+	_docks_label = _make_hud_cell(hud, col_w * 4.0, col_w, "扣")
 
 	var flash_layer := CanvasLayer.new()
 	flash_layer.layer = 20
@@ -235,19 +271,46 @@ func _build_ui() -> void:
 	_overlay_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_overlay_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overlay_label.offset_bottom = -80.0
+	_overlay_label.add_theme_font_override("font", _cjk_font())
 	_overlay_label.add_theme_font_size_override("font_size", 64)
 	_overlay_label.add_theme_color_override("font_color", FLASH_WHITE)
 	_overlay_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_overlay.add_child(_overlay_label)
 
+	_overlay_hint = Label.new()
+	_overlay_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_overlay_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_overlay_hint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	_overlay_hint.offset_top = 80.0
+	_overlay_hint.add_theme_font_override("font", _cjk_font())
+	_overlay_hint.add_theme_font_size_override("font_size", 36)
+	_overlay_hint.add_theme_color_override("font_color", FLASH_WHITE)
+	_overlay_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_overlay_hint.text = "點一下"
+	_overlay.add_child(_overlay_hint)
 
-func _make_hud_label(host: Node, pos: Vector2, size: Vector2, align: HorizontalAlignment) -> Label:
+
+func _make_hud_cell(host: Node, x: float, w: float, caption: String) -> Label:
+	var cap := Label.new()
+	cap.text = caption
+	cap.position = Vector2(x, 18)
+	cap.size = Vector2(w, 44)
+	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	cap.add_theme_font_override("font", _cjk_font())
+	cap.add_theme_font_size_override("font_size", 28)
+	cap.add_theme_color_override("font_color", INK)
+	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	host.add_child(cap)
+
 	var l := Label.new()
-	l.position = pos
-	l.size = size
-	l.horizontal_alignment = align
+	l.position = Vector2(x, 58)
+	l.size = Vector2(w, 72)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 42)
+	l.add_theme_font_override("font", _cjk_font())
+	l.add_theme_font_size_override("font_size", 40)
 	l.add_theme_color_override("font_color", INK)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(l)
@@ -267,9 +330,11 @@ func _refresh_hud() -> void:
 	_combo_label.text = str(_combo)
 	_block_label.text = "%d/3" % _blocked_count()
 	if _endless:
-		_time_label.text = str(ceili(_time_left))
+		_level_label.text = "無盡"
+		_docks_label.text = str(ceili(_time_left))
 	else:
-		_time_label.text = "%d/8  %d/%d" % [_level + 1, _level_docks, _goal]
+		_level_label.text = "%d/8" % (_level + 1)
+		_docks_label.text = "%d/%d" % [_level_docks, _goal]
 
 
 func _angle_diff_deg(a: float, b: float) -> float:
