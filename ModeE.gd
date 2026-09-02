@@ -112,7 +112,6 @@ class Rotor extends Node2D:
 				teal.a = 1.0
 				_band(r_in, r_out, mid - ho, mid + ho, teal)
 				var ink_edge := Color(ink, 1.0)
-				# Perfect band ≈ 85% of outer radial (was 62% / ~6%R, too thin on 390).
 				var r_white_in := r_out - thick * 0.85
 				_band(r_white_in - 3.0, r_out, mid - hi, mid + hi, ink_edge)
 				_band(r_white_in, r_out - 2.0, mid - hi, mid + hi, white)
@@ -280,21 +279,21 @@ func _build_ui() -> void:
 func _make_hud_cell(host: Node, x: float, w: float, caption: String) -> Label:
 	var cap := Label.new()
 	cap.text = caption
-	cap.position = Vector2(x, 18)
-	cap.size = Vector2(w, 44)
+	cap.position = Vector2(x, 8)
+	cap.size = Vector2(w, 56)
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cap.add_theme_font_size_override("font_size", 28)
+	cap.add_theme_font_size_override("font_size", 48)
 	cap.add_theme_color_override("font_color", INK)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(cap)
 
 	var l := Label.new()
-	l.position = Vector2(x, 58)
-	l.size = Vector2(w, 72)
+	l.position = Vector2(x, 64)
+	l.size = Vector2(w, 80)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_size_override("font_size", 40)
+	l.add_theme_font_size_override("font_size", 52)
 	l.add_theme_color_override("font_color", INK)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	host.add_child(l)
