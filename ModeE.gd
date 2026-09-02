@@ -112,9 +112,10 @@ class Rotor extends Node2D:
 				teal.a = 1.0
 				_band(r_in, r_out, mid - ho, mid + ho, teal)
 				var ink_edge := Color(ink, 1.0)
-				var r_white_in := r_out - thick * 0.62
-				_band(r_white_in - 6.0, r_out, mid - hi, mid + hi, ink_edge)
-				_band(r_white_in, r_out - 3.0, mid - hi, mid + hi, white)
+				# Perfect band ≈ 85% of outer radial (was 62% / ~6%R, too thin on 390).
+				var r_white_in := r_out - thick * 0.85
+				_band(r_white_in - 3.0, r_out, mid - hi, mid + hi, ink_edge)
+				_band(r_white_in, r_out - 2.0, mid - hi, mid + hi, white)
 
 
 class SnapTick extends Node2D:
