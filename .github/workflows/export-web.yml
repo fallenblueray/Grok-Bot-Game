@@ -10,34 +10,92 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      issues: write
+    env:
+      GODOT_VERSION: "4.7.2"
     steps:
       - uses: actions/checkout@v4
+
+      - name: Cache Godot
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            .godot-ci
+            .godot-templates
+          key: godot-${{ env.GODOT_VERSION }}-linux-templates-v1
+
+      - name: Download Godot and templates
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .godot-ci .godot-templates
+          curl -L --retry 3 -o /tmp/godot.zip \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+          unzip -o /tmp/godot.zip -d /tmp/godotbin
+          mv /tmp/godotbin/Godot_v${GODOT_VERSION}-stable_linux.x86_64 .godot-ci/godot
+          chmod +x .godot-ci/godot
+          curl -L --retry 3 -o /tmp/templates.tpz \
+            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+          unzip -o /tmp/templates.tpz -d /tmp/templates
+          if [ -d /tmp/templates/templates ]; then
+            mv /tmp/templates/templates/* .godot-templates/
+          else
+            mv /tmp/templates/* .godot-templates/
+          fi
+          ls .godot-templates | head
+
+      - name: Install templates
+        run: |
+          set -euo pipefail
+          TDIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mkdir -p "$TDIR"
+          cp -a .godot-templates/. "$TDIR/"
+          chmod +x .godot-ci/godot
+          .godot-ci/godot --version
+          ls "$TDIR" | grep web || true
 
       - name: Web Build
         run: |
           set -euo pipefail
           mkdir -p build/web
-          docker run --rm \
-            -v "$PWD":/project \
-            -w /project \
-            -e HOME=/root \
-            barichello/godot-ci:4.7.2 \
-            bash -lc '
-              set -e
-              echo "godot=$(command -v godot)"
-              godot --version
-              echo "templates:"
-              ls -la /root/.local/share/godot/export_templates/ || true
-              find /root/.local/share/godot/export_templates -name "web*" || true
-              godot --headless --import --quit || true
-              godot --headless --verbose --export-release "Web" /project/build/web/index.html
-              ls -la /project/build/web
-              test -f /project/build/web/index.html
-              touch /project/build/web/.nojekyll
-            '
-          sudo chown -R "$(id -u):$(id -g)" build/web
+          set +e
+          .godot-ci/godot --headless --import --quit > godot-import.log 2>&1
+          .godot-ci/godot --headless --verbose --export-release "Web" "$PWD/build/web/index.html" > godot-export.log 2>&1
+          EC=$?
+          set -e
+          echo "export_exit=$EC"
+          tail -n 100 godot-export.log
+          if [ "$EC" -ne 0 ] || [ ! -f build/web/index.html ]; then
+            echo "EXPORT FAILED"
+            exit 1
+          fi
+          touch build/web/.nojekyll
+          ls -la build/web
+
+      - name: Post log on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            let body = '';
+            for (const f of ['godot-import.log', 'godot-export.log']) {
+              if (fs.existsSync(f)) {
+                const t = fs.readFileSync(f, 'utf8');
+                body += '## ' + f + '\n```\n' + t.slice(-12000) + '\n```\n';
+              }
+            }
+            if (!body) body = '(no godot log files)';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: 'CI web export log ' + context.runNumber,
+              body: body
+            });
 
       - name: Deploy to GitHub Pages
+        if: success()
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
