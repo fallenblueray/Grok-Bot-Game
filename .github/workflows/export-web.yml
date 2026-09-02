@@ -23,27 +23,32 @@ jobs:
           path: |
             .godot-ci
             .godot-templates
-          key: godot-${{ env.GODOT_VERSION }}-linux-templates-v1
+          key: godot-${{ env.GODOT_VERSION }}-web-nothreads-v2
 
-      - name: Download Godot and templates
-        if: steps.cache.outputs.cache-hit != 'true'
+      - name: Download Godot and web templates
         run: |
           set -euo pipefail
           mkdir -p .godot-ci .godot-templates
-          curl -L --retry 3 -o /tmp/godot.zip \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
-          unzip -o /tmp/godot.zip -d /tmp/godotbin
-          mv /tmp/godotbin/Godot_v${GODOT_VERSION}-stable_linux.x86_64 .godot-ci/godot
-          chmod +x .godot-ci/godot
-          curl -L --retry 3 -o /tmp/templates.tpz \
-            "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
-          unzip -o /tmp/templates.tpz -d /tmp/templates
-          if [ -d /tmp/templates/templates ]; then
-            mv /tmp/templates/templates/* .godot-templates/
-          else
-            mv /tmp/templates/* .godot-templates/
+          if [ ! -x .godot-ci/godot ]; then
+            curl -fL --retry 5 --retry-delay 2 -o /tmp/godot.zip \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_linux.x86_64.zip"
+            unzip -o /tmp/godot.zip -d /tmp/godotbin
+            mv /tmp/godotbin/Godot_v${GODOT_VERSION}-stable_linux.x86_64 .godot-ci/godot
+            chmod +x .godot-ci/godot
           fi
-          ls .godot-templates | head
+          if [ ! -f .godot-templates/web_nothreads_release.zip ]; then
+            curl -fL --retry 5 --retry-delay 2 -o /tmp/templates.tpz \
+              "https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz"
+            ls -lh /tmp/templates.tpz
+            unzip -o /tmp/templates.tpz \
+              "templates/web_nothreads_debug.zip" \
+              "templates/web_nothreads_release.zip" \
+              -d /tmp/tpz
+            find /tmp/tpz -name 'web_nothreads_*.zip' -exec cp -v {} .godot-templates/ \;
+          fi
+          ls -lh .godot-templates
+          test -f .godot-templates/web_nothreads_release.zip
+          test -f .godot-templates/web_nothreads_debug.zip
 
       - name: Install templates
         run: |
@@ -51,21 +56,27 @@ jobs:
           TDIR="$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
           mkdir -p "$TDIR"
           cp -a .godot-templates/. "$TDIR/"
+          ls -lh "$TDIR"
+          test -f "$TDIR/web_nothreads_release.zip"
+          test -f "$TDIR/web_nothreads_debug.zip"
           chmod +x .godot-ci/godot
           .godot-ci/godot --version
-          ls "$TDIR" | grep web || true
 
       - name: Web Build
         run: |
           set -euo pipefail
           mkdir -p build/web
           set +e
-          .godot-ci/godot --headless --import --quit > godot-import.log 2>&1
-          .godot-ci/godot --headless --verbose --export-release "Web" "$PWD/build/web/index.html" > godot-export.log 2>&1
+          .godot-ci/godot --headless --path "$PWD" --import --quit > godot-import.log 2>&1
+          {
+            echo "=== templates ==="
+            ls -lh "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable" || true
+          } > godot-export.log
+          .godot-ci/godot --headless --path "$PWD" --verbose --export-release "Web" "$PWD/build/web/index.html" >> godot-export.log 2>&1
           EC=$?
           set -e
           echo "export_exit=$EC"
-          tail -n 100 godot-export.log
+          tail -n 120 godot-export.log
           if [ "$EC" -ne 0 ] || [ ! -f build/web/index.html ]; then
             echo "EXPORT FAILED"
             exit 1
