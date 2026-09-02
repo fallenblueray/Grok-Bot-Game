@@ -8,43 +8,35 @@ on:
 jobs:
   export-web:
     runs-on: ubuntu-24.04
-    container:
-      image: barichello/godot-ci:4.7.2
-      options: --user root
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Setup export templates
-        run: |
-          echo "whoami=$(whoami) HOME=$HOME"
-          mkdir -p "$HOME/.local/share/godot/export_templates"
-          mkdir -p "$HOME/.config"
-          if [ -d /root/.local/share/godot/export_templates ]; then
-            cp -a /root/.local/share/godot/export_templates/. "$HOME/.local/share/godot/export_templates/" || true
-          fi
-          if [ -d /root/.config/godot ] && [ ! -e "$HOME/.config/godot" ]; then
-            cp -a /root/.config/godot "$HOME/.config/godot" || true
-          fi
-          TDIR="$HOME/.local/share/godot/export_templates"
-          ls -la "$TDIR" || true
-          if [ -d "$TDIR/4.7.stable" ] && [ ! -e "$TDIR/4.7.2.stable" ]; then
-            ln -s 4.7.stable "$TDIR/4.7.2.stable"
-          fi
-          if [ -d "$TDIR/4.7.2.stable" ] && [ ! -e "$TDIR/4.7.stable" ]; then
-            ln -s 4.7.2.stable "$TDIR/4.7.stable"
-          fi
+
       - name: Web Build
         run: |
+          set -euo pipefail
           mkdir -p build/web
-          EXPORT_DIR="$(readlink -f build)"
-          godot --headless --import --quit || true
-          godot --headless --verbose --export-release "Web" "$EXPORT_DIR/web/index.html"
-          test -f "$EXPORT_DIR/web/index.html"
-          ls -la "$EXPORT_DIR/web"
-          touch "$EXPORT_DIR/web/.nojekyll"
-      - name: Install rsync
-        run: apt-get update && apt-get install -y rsync
+          docker run --rm \
+            -v "$PWD":/project \
+            -w /project \
+            -e HOME=/root \
+            barichello/godot-ci:4.7.2 \
+            bash -lc '
+              set -e
+              echo "godot=$(command -v godot)"
+              godot --version
+              echo "templates:"
+              ls -la /root/.local/share/godot/export_templates/ || true
+              find /root/.local/share/godot/export_templates -name "web*" || true
+              godot --headless --import --quit || true
+              godot --headless --verbose --export-release "Web" /project/build/web/index.html
+              ls -la /project/build/web
+              test -f /project/build/web/index.html
+              touch /project/build/web/.nojekyll
+            '
+          sudo chown -R "$(id -u):$(id -g)" build/web
+
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
