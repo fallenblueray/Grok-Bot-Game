@@ -1,5 +1,5 @@
 extends Control
-## Mode E — 相位咬合. 8-level chapter then 90s endless. Tweens only.
+## Mode E — phase snap. 8-level chapter then 90s endless. Tweens only.
 
 const INK := Color("1C1C1C")
 const BG := Color("F4E8D0")
@@ -25,7 +25,7 @@ const FAIL_RED := Color("E85D4C")
 @export var bounce_deg: float = 14.0
 @export var run_seconds: float = 90.0
 
-# period, inner°, outer°, docks to clear. 共7/8 sized so perfect window ≥ 90ms.
+# period, inner°, outer°, docks to clear. lv7/8 sized so perfect window ≥ 90ms.
 const LEVELS: Array[Dictionary] = [
 	{"period": 2.2, "inner": 16.0, "outer": 36.0, "goal": 12},
 	{"period": 2.0, "inner": 14.0, "outer": 32.0, "goal": 16},
@@ -51,7 +51,6 @@ var _busy: bool = false
 var _ended: bool = false
 var _restarting: bool = false
 var _blocked: Array[bool] = [false, false, false]
-var _font: Font
 
 var _score_label: Label
 var _combo_label: Label
@@ -65,18 +64,6 @@ var _flash: ColorRect
 var _rotor: Rotor
 var _tick: SnapTick
 var _radius: float = 388.8
-
-
-func _cjk_font() -> Font:
-	if _font != null:
-		return _font
-	var f := SystemFont.new()
-	f.font_names = PackedStringArray([
-		"Noto Sans CJK TC", "Noto Sans CJK", "Noto Sans TC",
-		"PingFang TC", "Microsoft JhengHei", "Source Han Sans TC", "sans-serif",
-	])
-	_font = f
-	return _font
 
 
 class Rotor extends Node2D:
@@ -241,11 +228,11 @@ func _build_ui() -> void:
 	hud.add_child(hud_bg)
 
 	var col_w := view_width / 5.0
-	_score_label = _make_hud_cell(hud, 0.0, col_w, "分")
-	_combo_label = _make_hud_cell(hud, col_w, col_w, "連")
-	_block_label = _make_hud_cell(hud, col_w * 2.0, col_w, "堵")
-	_level_label = _make_hud_cell(hud, col_w * 3.0, col_w, "關")
-	_docks_label = _make_hud_cell(hud, col_w * 4.0, col_w, "扣")
+	_score_label = _make_hud_cell(hud, 0.0, col_w, "S")
+	_combo_label = _make_hud_cell(hud, col_w, col_w, "C")
+	_block_label = _make_hud_cell(hud, col_w * 2.0, col_w, "X")
+	_level_label = _make_hud_cell(hud, col_w * 3.0, col_w, "1-8")
+	_docks_label = _make_hud_cell(hud, col_w * 4.0, col_w, "N")
 
 	var flash_layer := CanvasLayer.new()
 	flash_layer.layer = 20
@@ -272,7 +259,6 @@ func _build_ui() -> void:
 	_overlay_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_overlay_label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_overlay_label.offset_bottom = -80.0
-	_overlay_label.add_theme_font_override("font", _cjk_font())
 	_overlay_label.add_theme_font_size_override("font_size", 64)
 	_overlay_label.add_theme_color_override("font_color", FLASH_WHITE)
 	_overlay_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -283,11 +269,10 @@ func _build_ui() -> void:
 	_overlay_hint.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_overlay_hint.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	_overlay_hint.offset_top = 80.0
-	_overlay_hint.add_theme_font_override("font", _cjk_font())
 	_overlay_hint.add_theme_font_size_override("font_size", 36)
 	_overlay_hint.add_theme_color_override("font_color", FLASH_WHITE)
 	_overlay_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_overlay_hint.text = "點一下"
+	_overlay_hint.text = "TAP"
 	_overlay.add_child(_overlay_hint)
 
 
@@ -298,7 +283,6 @@ func _make_hud_cell(host: Node, x: float, w: float, caption: String) -> Label:
 	cap.size = Vector2(w, 44)
 	cap.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cap.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	cap.add_theme_font_override("font", _cjk_font())
 	cap.add_theme_font_size_override("font_size", 28)
 	cap.add_theme_color_override("font_color", INK)
 	cap.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -309,7 +293,6 @@ func _make_hud_cell(host: Node, x: float, w: float, caption: String) -> Label:
 	l.size = Vector2(w, 72)
 	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	l.add_theme_font_override("font", _cjk_font())
 	l.add_theme_font_size_override("font_size", 40)
 	l.add_theme_color_override("font_color", INK)
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -330,7 +313,7 @@ func _refresh_hud() -> void:
 	_combo_label.text = str(_combo)
 	_block_label.text = "%d/3" % _blocked_count()
 	if _endless:
-		_level_label.text = "無盡"
+		_level_label.text = "END"
 		_docks_label.text = str(ceili(_time_left))
 	else:
 		_level_label.text = "%d/8" % (_level + 1)
@@ -445,7 +428,7 @@ func _clear_level() -> void:
 	_busy = true
 	_overlay.color = Color(TEAL, 0.88)
 	if _level >= LEVELS.size() - 1:
-		_overlay_label.text = "無盡"
+		_overlay_label.text = "END"
 	else:
 		_overlay_label.text = "%d/8" % (_level + 2)
 	_overlay.visible = true
