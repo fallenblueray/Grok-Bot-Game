@@ -7,11 +7,31 @@ const TRACK_RIGHT := 1010.0
 const PLAYER_Y := 1480.0
 const SCROLL_SPEED := 360.0
 const KEYBOARD_SPEED := 820.0
-const GATE_WIDTH := 270.0
-const GATE_HEIGHT := 150.0
 const FIRST_EVENT_Y := -280.0
 const EVENT_SPACING := 480.0
 const TRACK_MID := 540.0
+const TRACK_WIDTH := TRACK_RIGHT - TRACK_LEFT
+## Art ref: track visual width 280 → scale into 1080 scene.
+const SKIN_REF_TRACK := 280.0
+const SKIN_SCALE := TRACK_WIDTH / SKIN_REF_TRACK
+const BEAN_DIAMETER := 14.0 * SKIN_SCALE
+const GATE_BOX := Vector2(120.0, 56.0) * SKIN_SCALE
+const GATE_STROKE := 8.0 * SKIN_SCALE
+const GATE_STROKE_RED_EXTRA := 4.0 * SKIN_SCALE
+const GATE_FAKE_NOTCH := 16.0 * SKIN_SCALE
+const SAW_DIAMETER := 72.0 * SKIN_SCALE
+const WALL_BOX := Vector2(280.0, 40.0) * SKIN_SCALE
+const SKIN_DEPTH := {"bean": 8.0, "gate": 12.0, "saw": 8.0, "wall": 20.0}
+## Reserved mesh slots (null = color-block fallback). Same AABB as draw boxes.
+var skin_meshes := {
+	"bean_blue": null,
+	"bean_red": null,
+	"gate_green": null,
+	"gate_red": null,
+	"gate_fake": null,
+	"saw": null,
+	"wall": null,
+}
 
 const TRACK := Color("E8EEF5")
 const INK := Color("1C1C1C")
@@ -349,13 +369,14 @@ func _draw_swarm(font: Font) -> void:
 	if draw_count > 0:
 		var cols := mini(10, draw_count)
 		var rows := int(ceil(float(draw_count) / float(cols)))
-		var spacing := 42.0
+		var spacing := BEAN_DIAMETER * 1.2
 		for i in draw_count:
 			var row := i / cols
 			var col := i % cols
 			var px := player_x + (float(col) - float(cols - 1) * 0.5) * spacing
 			var py := PLAYER_Y + (float(row) - float(rows - 1) * 0.5) * spacing
-			draw_circle(Vector2(px, py), 17.0, BLUE)
+			var bean_r := BEAN_DIAMETER * 0.5
+			draw_circle(Vector2(px, py), bean_r, BLUE)
 	_draw_outlined_string(font, Vector2(player_x - 150.0, PLAYER_Y - 130.0), str(count), 300.0, 82, WHITE)
 
 
@@ -363,54 +384,63 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	var y := float(obstacle["y"])
 	var kind := str(obstacle["kind"])
 	if kind == "fork":
-		_draw_gate(obstacle["left"], 335.0, y)
-		_draw_gate(obstacle["right"], 745.0, y)
+		var left_x := TRACK_LEFT + GATE_BOX.x * 0.5 + 24.0
+		var right_x := TRACK_RIGHT - GATE_BOX.x * 0.5 - 24.0
+		_draw_gate(obstacle["left"], left_x, y)
+		_draw_gate(obstacle["right"], right_x, y)
 		# Midline hint for which side counts.
-		draw_line(Vector2(TRACK_MID, y - 90.0), Vector2(TRACK_MID, y + 90.0), Color(INK, 0.35), 4.0)
+		var mid_h := GATE_BOX.y * 0.5 + 24.0
+		draw_line(Vector2(TRACK_MID, y - mid_h), Vector2(TRACK_MID, y + mid_h), Color(INK, 0.35), 4.0)
 	elif kind == "gate" or kind == "fake":
-		_draw_gate(obstacle, 540.0, y)
+		_draw_gate(obstacle, TRACK_MID, y)
 	elif kind == "saw":
-		_draw_saw(Vector2(540.0, y), int(obstacle["value"]))
+		_draw_saw(Vector2(TRACK_MID, y), int(obstacle["value"]))
 	elif kind == "tide":
 		_draw_tide(y, int(obstacle["value"]))
 	elif kind == "wall":
 		_draw_wall(y, int(obstacle["required"]))
 
 
+## Color-block fallback until skin_meshes[id] is filled with a Mesh/Texture.
+func _skin_ready(slot: String) -> bool:
+	return skin_meshes.has(slot) and skin_meshes[slot] != null
+
+
 func _draw_gate(gate: Dictionary, center_x: float, y: float) -> void:
-	var rect := Rect2(center_x - GATE_WIDTH * 0.5, y - GATE_HEIGHT * 0.5, GATE_WIDTH, GATE_HEIGHT)
+	var rect := Rect2(center_x - GATE_BOX.x * 0.5, y - GATE_BOX.y * 0.5, GATE_BOX.x, GATE_BOX.y)
 	var tint: Color = gate["gate_color"]
-	var label := ""
 	var is_fake := str(gate["kind"]) == "fake"
+	var is_red := tint == RED or is_fake
+	var label := str(gate["label"]) if is_fake else (str(gate["op"]) + str(gate["value"]))
+	var stroke := GATE_STROKE + (GATE_STROKE_RED_EXTRA if is_red else 0.0)
+	# Slot: gate_fake / gate_red / gate_green — mesh reserved, color-block for now.
+	draw_rect(rect, PALE_RED if is_red else PALE_GREEN, true)
+	draw_rect(rect, tint, false, stroke)
 	if is_fake:
-		label = str(gate["label"])
-	else:
-		label = str(gate["op"]) + str(gate["value"])
-	draw_rect(rect, PALE_RED if tint == RED else PALE_GREEN, true)
-	draw_rect(rect, tint, false, 30.0 if tint == RED else 18.0)
-	if is_fake:
+		var n := GATE_FAKE_NOTCH
 		var notch := PackedVector2Array([
-			rect.position + Vector2(rect.size.x - 58.0, 0.0),
+			rect.position + Vector2(rect.size.x - n, 0.0),
 			rect.position + Vector2(rect.size.x, 0.0),
-			rect.position + Vector2(rect.size.x, 58.0),
+			rect.position + Vector2(rect.size.x, n),
 		])
 		draw_colored_polygon(notch, TRACK)
-		draw_line(rect.position + Vector2(rect.size.x - 58.0, 0.0), rect.position + Vector2(rect.size.x, 58.0), tint, 8.0)
+		draw_line(rect.position + Vector2(rect.size.x - n, 0.0), rect.position + Vector2(rect.size.x, n), tint, stroke)
 	var font := ThemeDB.fallback_font
-	_draw_outlined_string(font, Vector2(rect.position.x, y + 22.0), label, rect.size.x, 64, WHITE, INK, 5.0)
+	_draw_outlined_string(font, Vector2(rect.position.x, y + GATE_BOX.y * 0.18), label, rect.size.x, 64, WHITE, INK, 5.0)
 
 
 func _draw_saw(center: Vector2, value: int) -> void:
-	var outer := 105.0
-	var inner := 72.0
+	var outer := SAW_DIAMETER * 0.5
+	var inner := outer * 0.62
+	var tooth := outer * 0.18
 	for i in 12:
 		var angle := TAU * float(i) / 12.0
 		var direction := Vector2(cos(angle), sin(angle))
 		var side := Vector2(-direction.y, direction.x)
 		var points := PackedVector2Array([
 			center + direction * outer,
-			center + side * 20.0 + direction * inner,
-			center - side * 20.0 + direction * inner,
+			center + side * tooth + direction * inner,
+			center - side * tooth + direction * inner,
 		])
 		draw_colored_polygon(points, INK)
 	draw_circle(center, inner, RED)
@@ -419,12 +449,16 @@ func _draw_saw(center: Vector2, value: int) -> void:
 
 
 func _draw_tide(y: float, value: int) -> void:
-	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), RED)
-	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), INK, false, 8.0)
-	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 16.0), "RED TIDE -" + str(value), TRACK_RIGHT - TRACK_LEFT, 36, WHITE, INK, 4.0)
+	var h := maxf(BEAN_DIAMETER * 2.2, 84.0)
+	draw_rect(Rect2(TRACK_LEFT, y - h * 0.5, TRACK_WIDTH, h), RED)
+	draw_rect(Rect2(TRACK_LEFT, y - h * 0.5, TRACK_WIDTH, h), INK, false, 8.0)
+	# bean_red slot reserved for tide dots later; band is the trigger stand-in.
+	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 16.0), "RED TIDE -" + str(value), TRACK_WIDTH, 36, WHITE, INK, 4.0)
 
 
 func _draw_wall(y: float, required: int) -> void:
-	draw_rect(Rect2(TRACK_LEFT, y - 60.0, TRACK_RIGHT - TRACK_LEFT, 120.0), INK)
-	draw_rect(Rect2(TRACK_LEFT + 12.0, y - 48.0, TRACK_RIGHT - TRACK_LEFT - 24.0, 96.0), Color("374151"))
-	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 28.0), "WALL  " + str(required), TRACK_RIGHT - TRACK_LEFT, 80, YELLOW, INK, 6.0)
+	var wall_h := WALL_BOX.y
+	var wall_w := TRACK_WIDTH  # table 280 maps to full track via SKIN_SCALE
+	draw_rect(Rect2(TRACK_LEFT, y - wall_h * 0.5, wall_w, wall_h), INK)
+	draw_rect(Rect2(TRACK_LEFT + 12.0, y - wall_h * 0.5 + 8.0, wall_w - 24.0, wall_h - 16.0), Color("374151"))
+	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + wall_h * 0.15), "WALL  " + str(required), wall_w, 80, YELLOW, INK, 6.0)
