@@ -199,13 +199,28 @@ function makeSaw(z, value) {
 
 function makeTide(z, value) {
   const tide = new THREE.Group();
-  const band = new THREE.Mesh(new THREE.BoxGeometry(280 * U, 18 * U, 16 * U), redMaterial);
-  band.position.y = -.05;
-  band.castShadow = true;
-  tide.add(band);
+  // Visual only: bean_red array (same diameter as blue). Settlement stays one full-width tax.
+  const spacingX = PLAYER_DIAMETER * 1.15;
+  const spacingZ = PLAYER_DIAMETER * 1.05;
+  const cols = Math.max(3, Math.floor((TRACK_WIDTH - PLAYER_DIAMETER) / spacingX) + 1);
+  const rows = 3;
+  const maxBeans = Math.min(cols * rows, MAX_COUNT);
+  for (let i = 0; i < maxBeans; i += 1) {
+    const row = Math.floor(i / cols);
+    const col = i % cols;
+    const bean = new THREE.Mesh(new THREE.SphereGeometry(PLAYER_RADIUS, 16, 12), redMaterial);
+    bean.scale.y = 1.08;
+    bean.castShadow = true;
+    bean.position.set(
+      (col - (cols - 1) / 2) * spacingX,
+      -.18,
+      (row - (rows - 1) / 2) * spacingZ
+    );
+    tide.add(bean);
+  }
   const label = `TIDE ${value < 0 ? '−' : '+'}${Math.abs(value)} · FULL WIDTH`;
   const sign = labelSprite(label, '#991b1b', 4.7);
-  sign.position.set(0, 18 * U / 2 + .55, 0);
+  sign.position.set(0, PLAYER_DIAMETER + .55, 0);
   tide.add(sign);
   tide.position.set(0, .15, z);
   tide.userData = { kind: 'tide', value, label, done: false };
