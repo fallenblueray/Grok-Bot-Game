@@ -1,418 +1,280 @@
 extends Control
-## Mode A — multiplier gate runner prototype.
-## A portrait top-down runner: the track scrolls, while the swarm slides horizontally.
+## Mode A: a portrait multiplier-gate runner.
 
 const VIEW_SIZE := Vector2(1080.0, 1920.0)
-const TRACK_RECT := Rect2(72.0, 0.0, 936.0, 1920.0)
-const PLAYER_Y := 1510.0
-const EVENT_START_Y := -220.0
-const EVENT_SPACING := 390.0
-const SCROLL_SPEED := 430.0
-const PLAYER_SLIDE_SPEED := 1500.0
-const POP_CAP := 150
+const TRACK_LEFT := 70.0
+const TRACK_RIGHT := 1010.0
+const PLAYER_Y := 1640.0
+const SCROLL_SPEED := 390.0
+const KEYBOARD_SPEED := 820.0
+const GATE_WIDTH := 270.0
+const GATE_HEIGHT := 150.0
 
-const INK := Color("1C1C1C")
 const TRACK := Color("E8EEF5")
+const INK := Color("1C1C1C")
 const BLUE := Color("3B82F6")
 const GREEN := Color("22C55E")
 const RED := Color("EF4444")
 const YELLOW := Color("F59E0B")
-const TIDE := Color("8B5CF6")
+const PALE_GREEN := Color("DCFCE7")
+const PALE_RED := Color("FEE2E2")
 
-var levels: Dictionary = {
-	1: {
-		"start": 5,
-		"wall": 20,
-		"events": [
-			{"kind": "gate", "op": "add", "value": 5},
-			{"kind": "gate", "op": "mul", "value": 2},
-			{"kind": "saw", "value": 3},
-			{"kind": "gate", "op": "add", "value": 10}
-		]
-	},
-	4: {
-		"start": 8,
-		"wall": 60,
-		"events": [
-			{"kind": "gate", "op": "mul", "value": 2},
-			{"kind": "choice", "left": {"op": "sub", "value": 10}, "right": {"op": "add", "value": 15}},
-			{"kind": "tide", "value": 12},
-			{"kind": "gate", "op": "mul", "value": 3},
-			{"kind": "saw", "value": 5}
-		]
-	},
-	8: {
-		"start": 10,
-		"wall": 120,
-		"events": [
-			{"kind": "gate", "op": "add", "value": 20},
-			{"kind": "choice", "left": {"op": "mul", "value": 3}, "right": {"op": "sub", "value": 20, "display": "x5", "fake": true}},
-			{"kind": "saw", "value": 5},
-			{"kind": "saw", "value": 5},
-			{"kind": "tide", "value": 25},
-			{"kind": "gate", "op": "mul", "value": 2},
-			{"kind": "gate", "op": "add", "value": 30}
-		]
-	}
-}
+const LEVEL_NUMBERS := [1, 4, 8]
 
-var level_order: Array[int] = [1, 4, 8]
 var level_index := 0
 var level_number := 1
-var population := 5
-var wall_count := 20
-var events: Array = []
-var resolved: Array[bool] = []
-var scroll := 0.0
-var swarm_x := 540.0
-var target_x := 540.0
+var count: int = 5
+var player_x := 540.0
+var obstacles: Array[Dictionary] = []
 var dragging := false
-var wall_resolved := false
-enum RunState { RUNNING, FAILED, CLEARED }
-var state: RunState = RunState.RUNNING
-var hud: Label
-var sub_hud: Label
+var left_held := false
+var right_held := false
+var ended := false
+var won := false
+var end_overlay: ColorRect
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_build_hud()
-	_start_level(level_number)
+	mouse_filter = Control.MOUSE_FILTER_STOP
+	level_index = clampi(int(Engine.get_meta("a_level", 0)), 0, LEVEL_NUMBERS.size() - 1)
+	level_number = LEVEL_NUMBERS[level_index]
+	_build_level(level_number)
 	queue_redraw()
-
-
-func _build_hud() -> void:
-	hud = Label.new()
-	hud.position = Vector2(0.0, 48.0)
-	hud.size = Vector2(VIEW_SIZE.x, 118.0)
-	hud.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	hud.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	hud.add_theme_font_size_override("font_size", 92)
-	hud.add_theme_color_override("font_color", INK)
-	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hud.z_index = 10
-	add_child(hud)
-
-	sub_hud = Label.new()
-	sub_hud.position = Vector2(0.0, 160.0)
-	sub_hud.size = Vector2(VIEW_SIZE.x, 52.0)
-	sub_hud.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sub_hud.add_theme_font_size_override("font_size", 27)
-	sub_hud.add_theme_color_override("font_color", INK.darkened(0.2))
-	sub_hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	sub_hud.z_index = 10
-	add_child(sub_hud)
-
-
-func _start_level(number: int) -> void:
-	level_number = number
-	var data: Dictionary = levels[level_number]
-	population = int(data["start"])
-	wall_count = int(data["wall"])
-	events = data["events"]
-	resolved.clear()
-	for _event in events:
-		resolved.append(false)
-	scroll = 0.0
-	swarm_x = VIEW_SIZE.x * 0.5
-	target_x = swarm_x
-	wall_resolved = false
-	state = RunState.RUNNING
-	_update_hud()
-	queue_redraw()
-
 
 func _process(delta: float) -> void:
-	if state == RunState.RUNNING:
-		scroll += SCROLL_SPEED * delta
-		swarm_x = move_toward(swarm_x, target_x, PLAYER_SLIDE_SPEED * delta)
-		_check_crossings()
-	_update_hud()
+	if ended:
+		return
+	var keyboard_axis := float(int(right_held) - int(left_held))
+	if keyboard_axis != 0.0:
+		player_x += keyboard_axis * KEYBOARD_SPEED * delta
+	player_x = clampf(player_x, TRACK_LEFT + 70.0, TRACK_RIGHT - 70.0)
+	for obstacle in obstacles:
+		if not bool(obstacle["triggered"]):
+			obstacle["y"] = float(obstacle["y"]) + SCROLL_SPEED * delta
+			if float(obstacle["y"]) >= PLAYER_Y:
+				obstacle["triggered"] = true
+				_trigger_obstacle(obstacle)
 	queue_redraw()
 
+func _build_level(number: int) -> void:
+	var start_count := 5
+	var sequence: Array[Dictionary] = []
+	match number:
+		1:
+			start_count = 5
+			sequence = [_gate("+", 5), _gate("*", 2), _saw(3), _gate("+", 10), _wall(20)]
+		4:
+			start_count = 8
+			sequence = [_gate("*", 2), _fork(_gate("-", 10, RED), _gate("+", 15, GREEN)), _tide(12), _gate("*", 3), _saw(5), _wall(60)]
+		8:
+			start_count = 10
+			sequence = [_gate("+", 20), _fork(_gate("*", 3, GREEN), _fake()), _saw(5), _saw(5), _tide(25), _gate("*", 2), _gate("+", 30), _wall(120)]
+	count = start_count
+	obstacles.clear()
+	var first_y := 300.0
+	var spacing := 340.0
+	for i in sequence.size():
+		var obstacle: Dictionary = sequence[i].duplicate(true)
+		obstacle["y"] = first_y + float(i) * spacing
+		obstacle["triggered"] = false
+		obstacles.append(obstacle)
 
-func _check_crossings() -> void:
-	for index in range(events.size()):
-		if not resolved[index] and _event_y(index) >= PLAYER_Y - 4.0:
-			_resolve_event(index)
-	if not wall_resolved and _wall_y() >= PLAYER_Y:
-		_resolve_wall()
+func _gate(op: String, value: int, tint: Color = Color("22C55E")) -> Dictionary:
+	return {"kind": "gate", "op": op, "value": value, "gate_color": tint}
 
+func _fake() -> Dictionary:
+	return {"kind": "fake", "label": "x5", "effect": -20, "gate_color": YELLOW}
 
-func _event_y(index: int) -> float:
-	return EVENT_START_Y + float(index + 1) * EVENT_SPACING - scroll
+func _fork(left: Dictionary, right: Dictionary) -> Dictionary:
+	return {"kind": "fork", "left": left, "right": right}
 
+func _saw(value: int) -> Dictionary:
+	return {"kind": "saw", "value": value}
 
-func _wall_y() -> float:
-	return EVENT_START_Y + float(events.size() + 1) * EVENT_SPACING - scroll
+func _tide(value: int) -> Dictionary:
+	return {"kind": "tide", "value": value}
 
+func _wall(required: int) -> Dictionary:
+	return {"kind": "wall", "required": required}
 
-func _resolve_event(index: int) -> void:
-	resolved[index] = true
-	var event: Dictionary = events[index]
-	var kind := String(event.get("kind", "gate"))
-	if kind == "gate":
-		_apply_gate(event)
-	elif kind == "choice":
-		var option: Dictionary = event["left"] if swarm_x < VIEW_SIZE.x * 0.5 else event["right"]
-		_apply_gate(option)
-	elif kind == "saw":
-		population = _capped_population(population - int(event["value"]))
-	elif kind == "tide":
-		population = _capped_population(population - int(event["value"]))
-	if population <= 0:
-		state = RunState.FAILED
-
-
-func _apply_gate(gate: Dictionary) -> void:
-	var op := String(gate.get("op", "add"))
-	var value := int(gate.get("value", 0))
-	match op:
-		"add":
-			population += value
-		"sub":
-			population -= value
-		"mul":
-			population *= value
-		"div":
-			population = int(floor(float(population) / float(maxi(value, 1))))
-	population = _capped_population(population)
-
-
-func _capped_population(value: int) -> int:
-	return clampi(value, 0, POP_CAP)
-
-
-func _resolve_wall() -> void:
-	wall_resolved = true
-	if population > wall_count:
-		state = RunState.CLEARED
-	else:
-		state = RunState.FAILED
-
-
-func _update_hud() -> void:
-	if not is_instance_valid(hud):
+func _trigger_obstacle(obstacle: Dictionary) -> void:
+	var kind := str(obstacle["kind"])
+	if kind == "fork":
+		var left: Dictionary = obstacle["left"]
+		var right: Dictionary = obstacle["right"]
+		var left_x := 335.0
+		var right_x := 745.0
+		if absf(player_x - left_x) <= GATE_WIDTH * 0.5:
+			_apply_effect(left)
+		elif absf(player_x - right_x) <= GATE_WIDTH * 0.5:
+			_apply_effect(right)
 		return
-	hud.text = str(population)
-	var progress := "LEVEL %d   /   WALL %d" % [level_number, wall_count]
-	if state == RunState.RUNNING:
-		sub_hud.text = progress + "   •   DRAG TO SLIDE"
-	elif state == RunState.CLEARED:
-		sub_hud.text = progress + "   •   CLEAR"
-	else:
-		sub_hud.text = progress + "   •   FAILED"
+	if kind == "wall":
+		_finish(count > int(obstacle["required"]))
+		return
+	_apply_effect(obstacle)
 
+func _apply_effect(effect: Dictionary) -> void:
+	var kind := str(effect["kind"])
+	if kind == "fake":
+		count += int(effect["effect"])
+	elif kind == "saw" or kind == "tide":
+		count -= int(effect["value"])
+	elif kind == "gate":
+		var value := maxi(1, int(effect["value"]))
+		var op := str(effect["op"])
+		match op:
+			"+":
+				count += value
+			"-":
+				count -= value
+			"*":
+				count *= value
+			"/":
+				count = int(floor(float(count) / float(value)))
+	count = maxi(0, count)
+
+func _finish(success: bool) -> void:
+	if ended:
+		return
+	ended = true
+	won = success
+	end_overlay = ColorRect.new()
+	end_overlay.color = Color(0.05, 0.07, 0.11, 0.86)
+	end_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	end_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(end_overlay)
+	var result := Label.new()
+	result.text = ("WIN" if success else "FAIL") + "\n\nTAP"
+	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	result.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	result.add_theme_font_size_override("font_size", 86)
+	result.add_theme_color_override("font_color", GREEN if success else RED)
+	result.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	end_overlay.add_child(result)
+	queue_redraw()
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseButton:
-		var mouse := event as InputEventMouseButton
-		if mouse.button_index == MOUSE_BUTTON_LEFT:
-			if mouse.pressed:
-				dragging = true
-				if state == RunState.RUNNING:
-					_set_target_x(mouse.position.x)
+	if ended:
+		if _pressed_event(event):
+			if won:
+				Engine.set_meta("a_level", (level_index + 1) % LEVEL_NUMBERS.size())
 			else:
-				dragging = false
-				if state != RunState.RUNNING:
-					_overlay_tap()
-	elif event is InputEventMouseMotion and dragging and state == RunState.RUNNING:
-		_set_target_x((event as InputEventMouseMotion).position.x)
+				Engine.set_meta("a_level", level_index)
+			get_tree().reload_current_scene()
+		return
+	if event is InputEventKey:
+		var key := event as InputEventKey
+		if key.keycode == KEY_LEFT:
+			left_held = key.pressed
+		elif key.keycode == KEY_RIGHT:
+			right_held = key.pressed
+		return
+	if event is InputEventMouseButton:
+		var mouse_button := event as InputEventMouseButton
+		if mouse_button.button_index == MOUSE_BUTTON_LEFT:
+			dragging = mouse_button.pressed
+		return
+	if event is InputEventMouseMotion and dragging:
+		var motion := event as InputEventMouseMotion
+		player_x = clampf(player_x + motion.relative.x, TRACK_LEFT + 70.0, TRACK_RIGHT - 70.0)
 	elif event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
-		if touch.pressed:
-			dragging = true
-			if state == RunState.RUNNING:
-				_set_target_x(touch.position.x)
-		else:
-			dragging = false
-			if state != RunState.RUNNING:
-				_overlay_tap()
-	elif event is InputEventScreenDrag and dragging and state == RunState.RUNNING:
-		_set_target_x((event as InputEventScreenDrag).position.x)
-	elif event is InputEventKey:
+		dragging = touch.pressed
+	elif event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		if dragging:
+			player_x = clampf(player_x + drag.relative.x, TRACK_LEFT + 70.0, TRACK_RIGHT - 70.0)
+
+func _pressed_event(event: InputEvent) -> bool:
+	if event is InputEventMouseButton:
+		var mouse_button := event as InputEventMouseButton
+		return mouse_button.pressed and mouse_button.button_index == MOUSE_BUTTON_LEFT
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).pressed
+	if event is InputEventKey:
 		var key := event as InputEventKey
-		if key.pressed and not key.echo and (key.keycode == KEY_SPACE or key.keycode == KEY_ENTER):
-			if state != RunState.RUNNING:
-				_overlay_tap()
-
-
-func _set_target_x(value: float) -> void:
-	target_x = clampf(value, TRACK_RECT.position.x + 56.0, TRACK_RECT.end.x - 56.0)
-
-
-func _overlay_tap() -> void:
-	if state == RunState.FAILED:
-		_start_level(level_number)
-	elif state == RunState.CLEARED:
-		if level_index + 1 < level_order.size():
-			level_index += 1
-			_start_level(level_order[level_index])
-		else:
-			_start_level(level_number)
-
+		return key.pressed and not key.echo and key.keycode in [KEY_ENTER, KEY_SPACE]
+	return false
 
 func _draw() -> void:
-	# Track and a quiet top margin for the HUD.
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color("F7FAFC"))
-	draw_rect(TRACK_RECT, TRACK)
-	draw_line(Vector2(TRACK_RECT.position.x, 0.0), Vector2(TRACK_RECT.position.x, VIEW_SIZE.y), INK.lightened(0.45), 5.0)
-	draw_line(Vector2(TRACK_RECT.end.x, 0.0), Vector2(TRACK_RECT.end.x, VIEW_SIZE.y), INK.lightened(0.45), 5.0)
+	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), TRACK)
+	draw_rect(Rect2(TRACK_LEFT, 0.0, 8.0, VIEW_SIZE.y), INK)
+	draw_rect(Rect2(TRACK_RIGHT - 8.0, 0.0, 8.0, VIEW_SIZE.y), INK)
+	var font := ThemeDB.fallback_font
+	draw_string(font, Vector2(90.0, 105.0), "MODE A   LV" + str(level_number), HORIZONTAL_ALIGNMENT_LEFT, -1.0, 38, INK)
+	draw_string(font, Vector2(90.0, 155.0), "DRAG LEFT / RIGHT", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 28, INK.darkened(0.15))
+	for obstacle in obstacles:
+		_draw_obstacle(obstacle)
+	_draw_swarm(font)
 
-	for index in range(events.size()):
-		var y := _event_y(index)
-		if y > -180.0 and y < VIEW_SIZE.y + 180.0:
-			_draw_event(events[index], y, resolved[index])
-	var wall_y := _wall_y()
-	if wall_y > -120.0 and wall_y < VIEW_SIZE.y + 180.0:
-		_draw_wall(wall_y)
+func _draw_swarm(font: Font) -> void:
+	var draw_count := mini(count, 150)
+	if draw_count > 0:
+		var cols := mini(10, draw_count)
+		var rows := int(ceil(float(draw_count) / float(cols)))
+		var spacing := 42.0
+		for i in draw_count:
+			var row := i / cols
+			var col := i % cols
+			var px := player_x + (float(col) - float(cols - 1) * 0.5) * spacing
+			var py := PLAYER_Y + (float(row) - float(rows - 1) * 0.5) * spacing
+			draw_circle(Vector2(px, py), 17.0, BLUE)
+	draw_string(font, Vector2(player_x - 150.0, PLAYER_Y - 130.0), str(count), HORIZONTAL_ALIGNMENT_CENTER, 300.0, 82, INK)
 
-	_draw_swarm()
-	if state != RunState.RUNNING:
-		_draw_overlay()
-
-
-func _draw_event(event: Dictionary, y: float, already_hit: bool) -> void:
-	var kind := String(event.get("kind", "gate"))
-	if kind == "saw":
-		_draw_saw(y, int(event["value"]), already_hit)
+func _draw_obstacle(obstacle: Dictionary) -> void:
+	var y := float(obstacle["y"])
+	var kind := str(obstacle["kind"])
+	if kind == "fork":
+		_draw_gate(obstacle["left"], 335.0, y)
+		_draw_gate(obstacle["right"], 745.0, y)
+	elif kind == "gate" or kind == "fake":
+		_draw_gate(obstacle, 540.0, y)
+	elif kind == "saw":
+		_draw_saw(Vector2(540.0, y), int(obstacle["value"]))
 	elif kind == "tide":
-		_draw_tide(y, int(event["value"]), already_hit)
-	elif kind == "choice":
-		_draw_choice(event, y, already_hit)
+		_draw_tide(y, int(obstacle["value"]))
+	elif kind == "wall":
+		_draw_wall(y, int(obstacle["required"]))
+
+func _draw_gate(gate: Dictionary, center_x: float, y: float) -> void:
+	var rect := Rect2(center_x - GATE_WIDTH * 0.5, y - GATE_HEIGHT * 0.5, GATE_WIDTH, GATE_HEIGHT)
+	var tint: Color = gate["gate_color"]
+	var label := ""
+	var is_fake := str(gate["kind"]) == "fake"
+	if is_fake:
+		label = str(gate["label"])
 	else:
-		_draw_gate(event, y, already_hit)
-
-
-func _draw_gate(gate: Dictionary, y: float, already_hit: bool) -> void:
-	var rect := Rect2(TRACK_RECT.position.x + 18.0, y - 48.0, TRACK_RECT.size.x - 36.0, 96.0)
-	var color := _gate_color(gate)
-	var fill := color.darkened(0.08) if not already_hit else color.darkened(0.45)
-	draw_rect(rect, fill)
-	draw_rect(rect, color, false, 10.0)
-	_draw_centered(_gate_text(gate), y + 20.0, 52, Color.WHITE)
-
-
-func _draw_choice(event: Dictionary, y: float, already_hit: bool) -> void:
-	var left := Rect2(TRACK_RECT.position.x + 18.0, y - 48.0, TRACK_RECT.size.x * 0.5 - 24.0, 96.0)
-	var right := Rect2(TRACK_RECT.position.x + TRACK_RECT.size.x * 0.5 + 6.0, y - 48.0, TRACK_RECT.size.x * 0.5 - 24.0, 96.0)
-	var left_gate: Dictionary = event["left"]
-	var right_gate: Dictionary = event["right"]
-	var left_color := _gate_color(left_gate)
-	var right_color := _gate_color(right_gate)
-	if already_hit:
-		left_color = left_color.darkened(0.45)
-		right_color = right_color.darkened(0.45)
-	draw_rect(left, left_color)
-	draw_rect(right, right_color)
-	draw_rect(left, left_color, false, 9.0)
-	draw_rect(right, right_color, false, 9.0)
-	_draw_centered_in_rect(_gate_text(left_gate), left, 42, Color.WHITE)
-	_draw_centered_in_rect(_gate_text(right_gate), right, 42, Color.WHITE)
-	if bool(right_gate.get("fake", false)):
-		# The fake gate keeps its bright red frame and a triangular notch.
-		draw_rect(right.grow(5.0), RED, false, 10.0)
-		var notch := PackedVector2Array([Vector2(right.end.x - 30.0, right.position.y - 5.0), Vector2(right.end.x + 5.0, right.position.y - 5.0), Vector2(right.end.x + 5.0, right.position.y + 30.0)])
-		draw_colored_polygon(notch, RED)
-	_draw_centered("CHOOSE", y - 61.0, 24, INK)
-
-
-func _draw_saw(y: float, damage: int, already_hit: bool) -> void:
-	var rect := Rect2(TRACK_RECT.position.x + 10.0, y - 30.0, TRACK_RECT.size.x - 20.0, 60.0)
-	var color := YELLOW.darkened(0.32) if not already_hit else YELLOW.darkened(0.6)
-	draw_rect(rect, color)
-	var teeth := 15
-	for i in range(teeth):
-		var x := rect.position.x + float(i) * rect.size.x / float(teeth)
-		var points := PackedVector2Array([Vector2(x, rect.position.y), Vector2(x + rect.size.x / float(teeth) * 0.5, rect.end.y), Vector2(x + rect.size.x / float(teeth), rect.position.y)])
-		draw_colored_polygon(points, INK)
-	_draw_centered("SAW  −%d" % damage, y + 11.0, 28, Color.WHITE)
-
-
-func _draw_tide(y: float, amount: int, already_hit: bool) -> void:
-	var rect := Rect2(TRACK_RECT.position.x + 10.0, y - 37.0, TRACK_RECT.size.x - 20.0, 74.0)
-	var color := TIDE.darkened(0.12) if not already_hit else TIDE.darkened(0.5)
-	draw_rect(rect, color)
-	for wave in range(5):
-		var wx := rect.position.x + 80.0 + float(wave) * 190.0
-		draw_arc(Vector2(wx, y + 3.0), 48.0, 0.0, PI, 16, Color.WHITE.lightened(0.15), 5.0)
-	_draw_centered("RED TIDE  −%d" % amount, y + 11.0, 30, Color.WHITE)
-
-
-func _draw_wall(y: float) -> void:
-	var rect := Rect2(TRACK_RECT.position.x + 4.0, y - 42.0, TRACK_RECT.size.x - 8.0, 84.0)
-	draw_rect(rect, INK)
-	for stripe in range(12):
-		var sx := rect.position.x + float(stripe) * rect.size.x / 12.0
-		var stripe_points := PackedVector2Array([Vector2(sx, rect.position.y), Vector2(sx + 30.0, rect.position.y), Vector2(sx - 15.0, rect.end.y), Vector2(sx - 45.0, rect.end.y)])
-		draw_colored_polygon(stripe_points, BLUE if stripe % 2 == 0 else YELLOW)
-	_draw_centered("WALL  >  %d" % wall_count, y + 13.0, 34, Color.WHITE)
-
-
-func _draw_swarm() -> void:
-	var center := Vector2(swarm_x, PLAYER_Y)
-	draw_circle(center + Vector2(0.0, 18.0), 76.0, Color(INK, 0.12))
-	var visible := mini(population, 48)
-	for index in range(visible):
-		var angle := float(index) * 2.399963
-		var ring := 26.0 + float(index % 5) * 13.0
-		var bean := center + Vector2(cos(angle), sin(angle)) * ring
-		draw_circle(bean, 16.0 if index < 20 else 13.0, BLUE if index % 4 != 0 else GREEN)
-	draw_circle(center, 26.0, INK)
-	draw_circle(center, 18.0, Color.WHITE)
-	_draw_centered("SWARM", PLAYER_Y + 112.0, 22, INK.darkened(0.15))
-
-
-func _draw_overlay() -> void:
-	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), Color(INK, 0.78))
-	var clear := state == RunState.CLEARED
-	var headline := "CLEAR!" if clear else "FAILED"
-	var detail := "WALL BROKEN" if clear else "THE SWARM IS GONE"
-	var action := "TAP TO NEXT" if clear and level_index + 1 < level_order.size() else "TAP TO RETRY"
-	_draw_centered(headline, 790.0, 92, Color.WHITE)
-	_draw_centered(detail, 885.0, 32, Color.WHITE.lightened(0.2))
-	var button := Rect2(190.0, 1060.0, 700.0, 150.0)
-	draw_rect(button, BLUE if clear else RED)
-	draw_rect(button, Color.WHITE, false, 6.0)
-	_draw_centered_in_rect(action, button, 42, Color.WHITE)
-
-
-func _gate_color(gate: Dictionary) -> Color:
-	match String(gate.get("op", "add")):
-		"add":
-			return GREEN
-		"sub":
-			return RED
-		"mul":
-			return BLUE
-		"div":
-			return YELLOW
-	return INK
-
-
-func _gate_text(gate: Dictionary) -> String:
-	if gate.has("display"):
-		return String(gate["display"])
-	var op := String(gate.get("op", "add"))
-	var value := int(gate.get("value", 0))
-	match op:
-		"add":
-			return "+%d" % value
-		"sub":
-			return "−%d" % value
-		"mul":
-			return "×%d" % value
-		"div":
-			return "÷%d" % value
-	return "?"
-
-
-func _draw_centered(text: String, baseline_y: float, font_size: int, color: Color) -> void:
+		label = str(gate["op"]) + str(gate["value"])
+	draw_rect(rect, PALE_RED if tint == RED else PALE_GREEN, true)
+	draw_rect(rect, tint, false, 30.0 if tint == RED else 18.0)
+	if is_fake:
+		var notch := PackedVector2Array([rect.position + Vector2(rect.size.x - 58.0, 0.0), rect.position + Vector2(rect.size.x, 0.0), rect.position + Vector2(rect.size.x, 58.0)])
+		draw_colored_polygon(notch, TRACK)
+		draw_line(rect.position + Vector2(rect.size.x - 58.0, 0.0), rect.position + Vector2(rect.size.x, 58.0), tint, 8.0)
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(0.0, baseline_y), text, HORIZONTAL_ALIGNMENT_CENTER, VIEW_SIZE.x, font_size, color)
+	draw_string(font, Vector2(rect.position.x, y + 18.0), label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 48, INK)
 
+func _draw_saw(center: Vector2, value: int) -> void:
+	var outer := 105.0
+	var inner := 72.0
+	for i in 12:
+		var angle := TAU * float(i) / 12.0
+		var direction := Vector2(cos(angle), sin(angle))
+		var side := Vector2(-direction.y, direction.x)
+		var points := PackedVector2Array([center + direction * outer, center + side * 20.0 + direction * inner, center - side * 20.0 + direction * inner])
+		draw_colored_polygon(points, YELLOW)
+	draw_circle(center, inner, Color("FEF3C7"))
+	draw_arc(center, inner, 0.0, TAU, 40, INK, 7.0)
+	draw_string(ThemeDB.fallback_font, Vector2(center.x - 100.0, center.y + 16.0), "-" + str(value), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 40, INK)
 
-func _draw_centered_in_rect(text: String, rect: Rect2, font_size: int, color: Color) -> void:
-	var font := ThemeDB.fallback_font
-	var baseline := rect.position.y + rect.size.y * 0.5 + float(font_size) * 0.35
-	draw_string(font, Vector2(rect.position.x, baseline), text, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, font_size, color)
+func _draw_tide(y: float, value: int) -> void:
+	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), RED)
+	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), INK, false, 8.0)
+	draw_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 14.0), "RED TIDE -" + str(value), HORIZONTAL_ALIGNMENT_CENTER, TRACK_RIGHT - TRACK_LEFT, 34, Color.WHITE)
+
+func _draw_wall(y: float, required: int) -> void:
+	draw_rect(Rect2(TRACK_LEFT, y - 52.0, TRACK_RIGHT - TRACK_LEFT, 104.0), INK)
+	draw_rect(Rect2(TRACK_LEFT + 12.0, y - 40.0, TRACK_RIGHT - TRACK_LEFT - 24.0, 80.0), YELLOW)
+	draw_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 22.0), "WALL  " + str(required), HORIZONTAL_ALIGNMENT_CENTER, TRACK_RIGHT - TRACK_LEFT, 48, INK)
