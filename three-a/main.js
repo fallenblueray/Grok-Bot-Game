@@ -13,7 +13,8 @@ const U = TRACK_WIDTH / 280;
 const PLAYER_DIAMETER = 14 * U;
 const PLAYER_RADIUS = PLAYER_DIAMETER / 2;
 const PLAYER_Z = 5;
-const SCROLL_SPEED = 3.2;
+const SCROLL_SPEED = 8;
+const WALL_GAP_SECONDS = 2.25;
 const MAX_COUNT = 150;
 const LEVEL_NUMBERS = [1, 4, 8];
 
@@ -275,9 +276,9 @@ const levelDefinitions = {
     wall: 20,
     events: [
       { type: 'gate', z: -5, label: '+5', operation: 'add', value: 5 },
-      { type: 'gate', z: -28, label: '×2', operation: 'multiply', value: 2 },
-      { type: 'saw', z: -52, value: -3 },
-      { type: 'gate', z: -76, label: '+10', operation: 'add', value: 10 },
+      { type: 'gate', z: -13, label: '×2', operation: 'multiply', value: 2 },
+      { type: 'saw', z: -21, value: -3 },
+      { type: 'gate', z: -29, label: '+10', operation: 'add', value: 10 },
     ],
   },
   4: {
@@ -285,10 +286,10 @@ const levelDefinitions = {
     wall: 50,
     events: [
       { type: 'gate', z: -5, label: '×2', operation: 'multiply', value: 2 },
-      { type: 'fork', z: -28, left: { label: '−10', operation: 'subtract', value: 10, red: true }, right: { label: '+15', operation: 'add', value: 15 } },
-      { type: 'tide', z: -54, value: -12 },
-      { type: 'gate', z: -80, label: '×3', operation: 'multiply', value: 3 },
-      { type: 'saw', z: -104, value: -5 },
+      { type: 'fork', z: -11, left: { label: '−10', operation: 'subtract', value: 10, red: true }, right: { label: '+15', operation: 'add', value: 15 } },
+      { type: 'tide', z: -17, value: -12 },
+      { type: 'gate', z: -23, label: '×3', operation: 'multiply', value: 3 },
+      { type: 'saw', z: -29, value: -5 },
     ],
   },
   8: {
@@ -296,12 +297,12 @@ const levelDefinitions = {
     wall: 120,
     events: [
       { type: 'gate', z: -5, label: '+20', operation: 'add', value: 20 },
-      { type: 'fork', z: -28, left: { label: '×3', operation: 'multiply', value: 3 }, right: { label: '×5', operation: 'add', value: -20, fake: true, red: true } },
-      { type: 'saw', z: -54, value: -5 },
-      { type: 'saw', z: -76, value: -5 },
-      { type: 'tide', z: -98, value: -25 },
-      { type: 'gate', z: -124, label: '×2', operation: 'multiply', value: 2 },
-      { type: 'gate', z: -148, label: '+30', operation: 'add', value: 30 },
+      { type: 'fork', z: -12, left: { label: '×3', operation: 'multiply', value: 3 }, right: { label: '×5', operation: 'add', value: -20, fake: true, red: true } },
+      { type: 'saw', z: -19, value: -5 },
+      { type: 'saw', z: -26, value: -5 },
+      { type: 'tide', z: -33, value: -25 },
+      { type: 'gate', z: -40, label: '×2', operation: 'multiply', value: 2 },
+      { type: 'gate', z: -47, label: '+30', operation: 'add', value: 30 },
     ],
   },
 };
@@ -325,7 +326,8 @@ function buildLevel(levelNumber) {
     if (event.type === 'saw') makeSaw(event.z, event.value);
     if (event.type === 'tide') makeTide(event.z, event.value);
   }
-  makeWall(-174, definition.wall);
+  const lastEventZ = definition.events[definition.events.length - 1].z;
+  makeWall(lastEventZ - SCROLL_SPEED * WALL_GAP_SECONDS, definition.wall);
   updateHud('GET READY');
 }
 
