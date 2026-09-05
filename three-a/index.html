@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#E8EEF5">
+  <title>Mode A — Level 1</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <main id="game" aria-label="Mode A Level 1">
+    <canvas id="scene"></canvas>
+    <section class="hud" aria-live="polite">
+      <div class="hud-card">
+        <span class="eyebrow">MODE A · LEVEL 1</span>
+        <strong id="count">5</strong>
+        <span class="count-label">COUNT</span>
+      </div>
+      <div class="hud-card goal-card">
+        <span class="eyebrow">NEXT WALL</span>
+        <strong>&gt; 20</strong>
+        <span class="count-label" id="event-readout">GET READY</span>
+      </div>
+    </section>
+    <div class="tip">DRAG ← → TO DODGE</div>
+    <section id="overlay" class="overlay" aria-modal="true" role="dialog">
+      <div class="overlay-panel">
+        <span class="eyebrow" id="result-kicker">MODE A · LEVEL 1</span>
+        <h1 id="result-title">RUN FAILED</h1>
+        <p id="result-copy">The wall held. Tap to try Level 1 again.</p>
+        <div id="fail-actions" class="actions">
+          <button id="fail-restart" class="primary">FAIL TAP — RESTART L1</button>
+        </div>
+        <div id="win-actions" class="actions hidden">
+          <button id="next" class="primary">NEXT</button>
+          <button id="menu" class="secondary">MENU</button>
+        </div>
+      </div>
+    </section>
+  </main>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

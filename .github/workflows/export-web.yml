@@ -81,8 +81,16 @@ jobs:
             echo "EXPORT FAILED"
             exit 1
           fi
+
+      - name: Stage Three.js vertical slice
+        run: |
+          set -euo pipefail
+          rm -rf build/web/three
+          cp -R three-a build/web/three
           touch build/web/.nojekyll
-          ls -la build/web
+          test -f build/web/three/index.html
+          ls -la build/web/three
+          ls -la build/web/.nojekyll
 
       - name: Post log on failure
         if: failure()
