@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
   <meta name="theme-color" content="#E8EEF5">
-  <title>Mode A — Level 1</title>
+  <title>Mode A — Level Select</title>
   <link rel="stylesheet" href="style.css">
   <script type="importmap">
     {
@@ -16,28 +16,40 @@
   </script>
 </head>
 <body>
-  <main id="game" aria-label="Mode A Level 1">
+  <main id="game" aria-label="Mode A level select">
     <canvas id="scene"></canvas>
-    <section class="hud" aria-live="polite">
+    <section class="hud hidden" aria-live="polite">
       <div class="hud-card">
-        <span class="eyebrow">MODE A · LEVEL 1</span>
-        <strong id="count">5</strong>
+        <span class="eyebrow">MODE A · LEVEL <span id="level-number">—</span></span>
+        <strong id="count">—</strong>
         <span class="count-label">COUNT</span>
       </div>
       <div class="hud-card goal-card">
         <span class="eyebrow">NEXT WALL</span>
-        <strong>&gt; 20</strong>
-        <span class="count-label" id="event-readout">GET READY</span>
+        <strong id="wall-target">—</strong>
+        <span class="count-label" id="event-readout">SELECT A LEVEL</span>
       </div>
     </section>
-    <div class="tip">DRAG ← → TO DODGE</div>
+    <div class="tip hidden">DRAG ← → TO CHOOSE A FORK</div>
+    <section id="menu-screen" class="menu-screen show" aria-modal="true" role="dialog">
+      <div class="menu-panel">
+        <span class="eyebrow">MODE A</span>
+        <h1>CHOOSE LEVEL</h1>
+        <p>Pick a frozen Godot table to run.</p>
+        <div class="level-buttons" aria-label="Level selection">
+          <button class="primary level-button" data-level="1">LEVEL 1</button>
+          <button class="primary level-button" data-level="4">LEVEL 4</button>
+          <button class="primary level-button" data-level="8">LEVEL 8</button>
+        </div>
+      </div>
+    </section>
     <section id="overlay" class="overlay" aria-modal="true" role="dialog">
       <div class="overlay-panel">
-        <span class="eyebrow" id="result-kicker">MODE A · LEVEL 1</span>
+        <span class="eyebrow" id="result-kicker">MODE A</span>
         <h1 id="result-title">RUN FAILED</h1>
-        <p id="result-copy">The wall held. Tap to try Level 1 again.</p>
+        <p id="result-copy">The wall held.</p>
         <div id="fail-actions" class="actions">
-          <button id="fail-restart" class="primary">FAIL TAP — RESTART L1</button>
+          <button id="fail-restart" class="primary">TAP — RESTART</button>
         </div>
         <div id="win-actions" class="actions hidden">
           <button id="next" class="primary">NEXT</button>

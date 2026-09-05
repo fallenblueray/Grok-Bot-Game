@@ -15,15 +15,24 @@ const PLAYER_RADIUS = PLAYER_DIAMETER / 2;
 const PLAYER_Z = 5;
 const SCROLL_SPEED = 3.2;
 const MAX_COUNT = 150;
+const LEVEL_NUMBERS = [1, 4, 8];
 
 const canvas = document.querySelector('#scene');
+const game = document.querySelector('#game');
+const hud = document.querySelector('.hud');
 const countEl = document.querySelector('#count');
+const levelEl = document.querySelector('#level-number');
+const wallEl = document.querySelector('#wall-target');
 const eventReadout = document.querySelector('#event-readout');
+const tip = document.querySelector('.tip');
+const menuScreen = document.querySelector('#menu-screen');
 const overlay = document.querySelector('#overlay');
+const resultKicker = document.querySelector('#result-kicker');
 const resultTitle = document.querySelector('#result-title');
 const resultCopy = document.querySelector('#result-copy');
 const failActions = document.querySelector('#fail-actions');
 const winActions = document.querySelector('#win-actions');
+const nextButton = document.querySelector('#next');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -51,19 +60,20 @@ const level = new THREE.Group();
 scene.add(level);
 const events = [];
 let playerX = 0;
-let count = 5;
-let runState = 'playing';
+let count = 0;
+let currentLevel = null;
+let runState = 'menu';
 let lastTime = performance.now();
 
 function material(color, metalness = .16, roughness = .52) {
   return new THREE.MeshStandardMaterial({ color, metalness, roughness });
 }
-const trackMaterial = material(COLORS.track, .1, .6);
 const inkMaterial = material(COLORS.ink, .18, .48);
 const blueMaterial = material(COLORS.blue, .18, .48);
 const greenMaterial = material(COLORS.green, .16, .5);
 const redMaterial = material(COLORS.red, .18, .48);
 const wallMaterial = material(COLORS.wall, .22, .55);
+const trackMaterial = material(COLORS.track, .1, .6);
 
 function labelSprite(text, color = '#1C1C1C', width = 2.5) {
   const labelCanvas = document.createElement('canvas');
@@ -106,31 +116,62 @@ function addTrack() {
   }
 }
 
-function makeGate(label, z, operation, value) {
-  const gate = new THREE.Group();
+function gateParts(label, colorMaterial, stroke, fake = false) {
+  const group = new THREE.Group();
   const width = 120 * U;
   const height = 56 * U;
-  const stroke = 8 * U;
   const depth = 12 * U;
   const sideGeometry = new THREE.BoxGeometry(stroke, height, depth);
   const topGeometry = new THREE.BoxGeometry(width, stroke, depth);
-  const left = new THREE.Mesh(sideGeometry, greenMaterial);
-  const right = new THREE.Mesh(sideGeometry, greenMaterial);
-  const top = new THREE.Mesh(topGeometry, greenMaterial);
+  const left = new THREE.Mesh(sideGeometry, colorMaterial);
+  const right = new THREE.Mesh(sideGeometry, colorMaterial);
+  const top = new THREE.Mesh(topGeometry, colorMaterial);
   left.position.x = -(width - stroke) / 2;
   right.position.x = (width - stroke) / 2;
   top.position.y = height / 2 - stroke / 2;
-  for (const part of [left, right, top]) { part.castShadow = true; gate.add(part); }
-  const sign = labelSprite(label, '#166534', 3.2);
+  for (const part of [left, right, top]) {
+    part.castShadow = true;
+    group.add(part);
+  }
+  if (fake) {
+    const notch = new THREE.Mesh(new THREE.BoxGeometry(16 * U, 16 * U, depth), colorMaterial);
+    notch.position.set(width / 2 - 8 * U, height / 2 - 8 * U, 0);
+    notch.castShadow = true;
+    group.add(notch);
+  }
+  const sign = labelSprite(label, colorMaterial === redMaterial ? '#991b1b' : '#166534', 3.2);
   sign.position.set(0, height / 2 + .52, 0);
-  gate.add(sign);
-  gate.position.set(0, .45, z);
+  group.add(sign);
+  return group;
+}
+
+function makeGate(label, z, operation, value, options = {}) {
+  const gate = gateParts(label, options.red ? redMaterial : greenMaterial, options.red ? 12 * U : 8 * U, options.fake);
+  gate.position.set(options.x || 0, .45, z);
   gate.userData = { kind: 'gate', operation, value, label, done: false };
   level.add(gate);
   events.push(gate);
 }
 
-function makeSaw(z) {
+function makeFork(z, left, right) {
+  const fork = new THREE.Group();
+  const leftGate = gateParts(left.label, left.red ? redMaterial : greenMaterial, left.red ? 12 * U : 8 * U, left.fake);
+  const rightGate = gateParts(right.label, right.red ? redMaterial : greenMaterial, right.red ? 12 * U : 8 * U, right.fake);
+  leftGate.position.x = -3.45;
+  rightGate.position.x = 3.45;
+  fork.add(leftGate, rightGate);
+  const leftHint = labelSprite('LEFT', '#991b1b', 1.8);
+  leftHint.position.set(-3.45, 3.15, 0);
+  const rightHint = labelSprite('RIGHT', '#166534', 1.8);
+  rightHint.position.set(3.45, 3.15, 0);
+  fork.add(leftHint, rightHint);
+  fork.position.set(0, .45, z);
+  fork.userData = { kind: 'fork', left, right, done: false };
+  level.add(fork);
+  events.push(fork);
+}
+
+function makeSaw(z, value) {
   const saw = new THREE.Group();
   const radius = 36 * U;
   const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .48, radius * .48, 10 * U, 24), redMaterial);
@@ -146,34 +187,51 @@ function makeSaw(z) {
     tooth.castShadow = true;
     saw.add(tooth);
   }
-  const sign = labelSprite('SAW −3', '#991b1b', 3.2);
+  const label = `SAW ${value < 0 ? '−' : '+'}${Math.abs(value)} · FULL WIDTH`;
+  const sign = labelSprite(label, '#991b1b', 3.9);
   sign.position.set(0, radius + .75, 0);
   saw.add(sign);
   saw.position.set(0, .05, z);
-  saw.userData = { kind: 'saw', value: -3, label: 'SAW −3', done: false };
+  saw.userData = { kind: 'saw', value, label, done: false };
   level.add(saw);
   events.push(saw);
 }
 
-function makeWall(z) {
+function makeTide(z, value) {
+  const tide = new THREE.Group();
+  const band = new THREE.Mesh(new THREE.BoxGeometry(280 * U, 18 * U, 16 * U), redMaterial);
+  band.position.y = -.05;
+  band.castShadow = true;
+  tide.add(band);
+  const label = `TIDE ${value < 0 ? '−' : '+'}${Math.abs(value)} · FULL WIDTH`;
+  const sign = labelSprite(label, '#991b1b', 4.7);
+  sign.position.set(0, 18 * U / 2 + .55, 0);
+  tide.add(sign);
+  tide.position.set(0, .15, z);
+  tide.userData = { kind: 'tide', value, label, done: false };
+  level.add(tide);
+  events.push(tide);
+}
+
+function makeWall(z, target) {
   const wall = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(280 * U, 40 * U, 20 * U), wallMaterial);
   body.position.y = -.05;
   body.castShadow = true;
   body.receiveShadow = true;
   wall.add(body);
-  const sign = labelSprite('WALL 20 · NEED > 20', '#ffffff', 4.7);
+  const sign = labelSprite(`WALL ${target} · NEED > ${target}`, '#ffffff', 4.7);
   sign.position.set(0, 40 * U / 2 + .55, 0);
   wall.add(sign);
   wall.position.set(0, .15, z);
-  wall.userData = { kind: 'wall', value: 20, label: 'WALL 20', done: false };
+  wall.userData = { kind: 'wall', value: target, label: `WALL ${target}`, done: false };
   level.add(wall);
   events.push(wall);
 }
 
-function makeStart() {
+function makeStart(startCount) {
   const start = new THREE.Group();
-  const sign = labelSprite('START · COUNT 5', '#1d4ed8', 3.6);
+  const sign = labelSprite(`START · COUNT ${startCount}`, '#1d4ed8', 3.6);
   sign.position.set(0, .9, 0);
   start.add(sign);
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(TRACK_WIDTH, .025, .18), blueMaterial);
@@ -196,17 +254,70 @@ function makePlayer() {
   return { bean, ring };
 }
 
-addTrack();
-makeStart();
-makeGate('+5', -5, 'add', 5);
-makeGate('×2', -28, 'multiply', 2);
-makeSaw(-52);
-makeGate('+10', -76, 'add', 10);
-makeWall(-106);
-const player = makePlayer();
+const levelDefinitions = {
+  1: {
+    start: 5,
+    wall: 20,
+    events: [
+      { type: 'gate', z: -5, label: '+5', operation: 'add', value: 5 },
+      { type: 'gate', z: -28, label: '×2', operation: 'multiply', value: 2 },
+      { type: 'saw', z: -52, value: -3 },
+      { type: 'gate', z: -76, label: '+10', operation: 'add', value: 10 },
+    ],
+  },
+  4: {
+    start: 8,
+    wall: 50,
+    events: [
+      { type: 'gate', z: -5, label: '×2', operation: 'multiply', value: 2 },
+      { type: 'fork', z: -28, left: { label: '−10', operation: 'subtract', value: 10, red: true }, right: { label: '+15', operation: 'add', value: 15 } },
+      { type: 'tide', z: -54, value: -12 },
+      { type: 'gate', z: -80, label: '×3', operation: 'multiply', value: 3 },
+      { type: 'saw', z: -104, value: -5 },
+    ],
+  },
+  8: {
+    start: 10,
+    wall: 120,
+    events: [
+      { type: 'gate', z: -5, label: '+20', operation: 'add', value: 20 },
+      { type: 'fork', z: -28, left: { label: '×3', operation: 'multiply', value: 3 }, right: { label: '×5', operation: 'add', value: -20, fake: true, red: true } },
+      { type: 'saw', z: -54, value: -5 },
+      { type: 'saw', z: -76, value: -5 },
+      { type: 'tide', z: -98, value: -25 },
+      { type: 'gate', z: -124, label: '×2', operation: 'multiply', value: 2 },
+      { type: 'gate', z: -148, label: '+30', operation: 'add', value: 30 },
+    ],
+  },
+};
+
+function clearLevel() {
+  while (level.children.length) level.remove(level.children[0]);
+  events.length = 0;
+}
+
+function buildLevel(levelNumber) {
+  clearLevel();
+  const definition = levelDefinitions[levelNumber];
+  currentLevel = levelNumber;
+  count = definition.start;
+  level.position.z = 0;
+  addTrack();
+  makeStart(definition.start);
+  for (const event of definition.events) {
+    if (event.type === 'gate') makeGate(event.label, event.z, event.operation, event.value);
+    if (event.type === 'fork') makeFork(event.z, event.left, event.right);
+    if (event.type === 'saw') makeSaw(event.z, event.value);
+    if (event.type === 'tide') makeTide(event.z, event.value);
+  }
+  makeWall(-174, definition.wall);
+  updateHud('GET READY');
+}
 
 function updateHud(message = 'DRAG TO MOVE') {
   countEl.textContent = String(count);
+  levelEl.textContent = String(currentLevel || '—');
+  wallEl.textContent = currentLevel ? `> ${levelDefinitions[currentLevel].wall}` : '—';
   eventReadout.textContent = message;
 }
 
@@ -216,25 +327,51 @@ function setPlayerX(nextX) {
   player.ring.position.x = playerX;
 }
 
-function restart() {
-  count = 5;
-  playerX = 0;
-  setPlayerX(0);
-  level.position.z = 0;
-  for (const event of events) event.userData.done = false;
-  runState = 'playing';
+function applyOperation(value, operation, operand) {
+  if (operation === 'add') value += operand;
+  if (operation === 'subtract') value -= operand;
+  if (operation === 'multiply') value *= operand;
+  if (operation === 'divide') value = operand === 0 ? value : value / operand;
+  return THREE.MathUtils.clamp(value, 0, MAX_COUNT);
+}
+
+function showMenu() {
+  runState = 'menu';
+  currentLevel = null;
+  clearLevel();
   overlay.classList.remove('show');
+  menuScreen.classList.add('show');
+  hud.classList.add('hidden');
+  tip.classList.add('hidden');
+  updateHud('SELECT A LEVEL');
+}
+
+function startLevel(levelNumber) {
+  buildLevel(levelNumber);
+  runState = 'playing';
+  menuScreen.classList.remove('show');
+  hud.classList.remove('hidden');
+  tip.classList.remove('hidden');
+  overlay.classList.remove('show');
+  setPlayerX(0);
+}
+
+function restart() {
+  if (!currentLevel) return;
+  startLevel(currentLevel);
   updateHud('GET READY');
 }
 
 function finish(won) {
   runState = won ? 'won' : 'failed';
+  resultKicker.textContent = `MODE A · LEVEL ${currentLevel}`;
   resultTitle.textContent = won ? 'LEVEL CLEAR' : 'RUN FAILED';
   resultCopy.textContent = won
-    ? `You reached ${count}. The wall needed more than 20.`
-    : `The wall held at ${count}. Tap to try Level 1 again.`;
+    ? `You reached ${count}. The wall needed more than ${levelDefinitions[currentLevel].wall}.`
+    : `The wall held at ${count}. Tap to try Level ${currentLevel} again.`;
   failActions.classList.toggle('hidden', won);
   winActions.classList.toggle('hidden', !won);
+  nextButton.textContent = currentLevel === 8 ? 'MENU' : 'NEXT';
   overlay.classList.add('show');
 }
 
@@ -242,15 +379,19 @@ function applyEvent(event) {
   const data = event.userData;
   data.done = true;
   if (data.kind === 'gate') {
-    count = data.operation === 'multiply' ? count * data.value : count + data.value;
-    count = Math.min(count, MAX_COUNT);
+    count = applyOperation(count, data.operation, data.value);
     updateHud(data.label);
     return;
   }
-  if (data.kind === 'saw') {
-    const hit = Math.abs(playerX - event.position.x) < 1.08;
-    if (hit) count = Math.max(0, count + data.value);
-    updateHud(hit ? 'SAW HIT · −3' : 'SAW DODGED');
+  if (data.kind === 'fork') {
+    const option = playerX < 0 ? data.left : data.right;
+    count = applyOperation(count, option.operation, option.value);
+    updateHud(`${playerX < 0 ? 'LEFT' : 'RIGHT'} · ${option.label}`);
+    return;
+  }
+  if (data.kind === 'saw' || data.kind === 'tide') {
+    count = applyOperation(count, 'add', data.value);
+    updateHud(data.label);
     return;
   }
   if (data.kind === 'wall') {
@@ -303,10 +444,18 @@ window.addEventListener('keydown', (event) => {
   if (event.key === 'ArrowLeft' || event.key.toLowerCase() === 'a') { event.preventDefault(); setPlayerX(playerX - .55); }
   if (event.key === 'ArrowRight' || event.key.toLowerCase() === 'd') { event.preventDefault(); setPlayerX(playerX + .55); }
 });
+document.querySelectorAll('[data-level]').forEach((button) => {
+  button.addEventListener('click', () => startLevel(Number(button.dataset.level)));
+});
 document.querySelector('#fail-restart').addEventListener('click', restart);
-document.querySelector('#next').addEventListener('click', restart);
-document.querySelector('#menu').addEventListener('click', restart);
+nextButton.addEventListener('click', () => {
+  const nextIndex = LEVEL_NUMBERS.indexOf(currentLevel) + 1;
+  if (nextIndex >= LEVEL_NUMBERS.length) showMenu();
+  else startLevel(LEVEL_NUMBERS[nextIndex]);
+});
+document.querySelector('#menu').addEventListener('click', showMenu);
 window.addEventListener('resize', resize);
+const player = makePlayer();
 resize();
-updateHud('GET READY');
+showMenu();
 requestAnimationFrame(tick);
