@@ -20,6 +20,7 @@ const RED := Color("EF4444")
 const YELLOW := Color("F59E0B")
 const PALE_GREEN := Color("DCFCE7")
 const PALE_RED := Color("FEE2E7")
+const WHITE := Color("FFFFFF")
 
 const LEVEL_NUMBERS := [1, 4, 8]
 
@@ -271,6 +272,15 @@ func _pressed_event(event: InputEvent) -> bool:
 	return false
 
 
+func _draw_outlined_string(font: Font, pos: Vector2, text: String, width: float, size: int, fill: Color, outline: Color = INK, outline_px: float = 4.0) -> void:
+	for ox in [-1.0, 0.0, 1.0]:
+		for oy in [-1.0, 0.0, 1.0]:
+			if ox == 0.0 and oy == 0.0:
+				continue
+			draw_string(font, pos + Vector2(ox, oy) * outline_px, text, HORIZONTAL_ALIGNMENT_CENTER, width, size, outline)
+	draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_CENTER, width, size, fill)
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, VIEW_SIZE), TRACK)
 	draw_rect(Rect2(TRACK_LEFT, 0.0, 8.0, VIEW_SIZE.y), INK)
@@ -295,7 +305,7 @@ func _draw_swarm(font: Font) -> void:
 			var px := player_x + (float(col) - float(cols - 1) * 0.5) * spacing
 			var py := PLAYER_Y + (float(row) - float(rows - 1) * 0.5) * spacing
 			draw_circle(Vector2(px, py), 17.0, BLUE)
-	draw_string(font, Vector2(player_x - 150.0, PLAYER_Y - 130.0), str(count), HORIZONTAL_ALIGNMENT_CENTER, 300.0, 82, INK)
+	_draw_outlined_string(font, Vector2(player_x - 150.0, PLAYER_Y - 130.0), str(count), 300.0, 82, WHITE)
 
 
 func _draw_obstacle(obstacle: Dictionary) -> void:
@@ -334,7 +344,7 @@ func _draw_gate(gate: Dictionary, center_x: float, y: float) -> void:
 		draw_colored_polygon(notch, TRACK)
 		draw_line(rect.position + Vector2(rect.size.x - 58.0, 0.0), rect.position + Vector2(rect.size.x, 58.0), tint, 8.0)
 	var font := ThemeDB.fallback_font
-	draw_string(font, Vector2(rect.position.x, y + 18.0), label, HORIZONTAL_ALIGNMENT_CENTER, rect.size.x, 48, INK)
+	_draw_outlined_string(font, Vector2(rect.position.x, y + 22.0), label, rect.size.x, 64, WHITE, INK, 5.0)
 
 
 func _draw_saw(center: Vector2, value: int) -> void:
@@ -349,19 +359,19 @@ func _draw_saw(center: Vector2, value: int) -> void:
 			center + side * 20.0 + direction * inner,
 			center - side * 20.0 + direction * inner,
 		])
-		draw_colored_polygon(points, RED)
-	draw_circle(center, inner, Color("FEE2E2"))
-	draw_arc(center, inner, 0.0, TAU, 40, INK, 7.0)
-	draw_string(ThemeDB.fallback_font, Vector2(center.x - 100.0, center.y + 16.0), "-" + str(value), HORIZONTAL_ALIGNMENT_CENTER, 200.0, 40, INK)
+		draw_colored_polygon(points, INK)
+	draw_circle(center, inner, RED)
+	draw_arc(center, inner, 0.0, TAU, 40, INK, 8.0)
+	_draw_outlined_string(ThemeDB.fallback_font, Vector2(center.x - 100.0, center.y + 18.0), "-" + str(value), 200.0, 44, WHITE, INK, 4.0)
 
 
 func _draw_tide(y: float, value: int) -> void:
 	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), RED)
 	draw_rect(Rect2(TRACK_LEFT, y - 42.0, TRACK_RIGHT - TRACK_LEFT, 84.0), INK, false, 8.0)
-	draw_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 14.0), "RED TIDE -" + str(value), HORIZONTAL_ALIGNMENT_CENTER, TRACK_RIGHT - TRACK_LEFT, 34, Color.WHITE)
+	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 16.0), "RED TIDE -" + str(value), TRACK_RIGHT - TRACK_LEFT, 36, WHITE, INK, 4.0)
 
 
 func _draw_wall(y: float, required: int) -> void:
-	draw_rect(Rect2(TRACK_LEFT, y - 52.0, TRACK_RIGHT - TRACK_LEFT, 104.0), INK)
-	draw_rect(Rect2(TRACK_LEFT + 12.0, y - 40.0, TRACK_RIGHT - TRACK_LEFT - 24.0, 80.0), YELLOW)
-	draw_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 22.0), "WALL  " + str(required), HORIZONTAL_ALIGNMENT_CENTER, TRACK_RIGHT - TRACK_LEFT, 48, INK)
+	draw_rect(Rect2(TRACK_LEFT, y - 60.0, TRACK_RIGHT - TRACK_LEFT, 120.0), INK)
+	draw_rect(Rect2(TRACK_LEFT + 12.0, y - 48.0, TRACK_RIGHT - TRACK_LEFT - 24.0, 96.0), Color("374151"))
+	_draw_outlined_string(ThemeDB.fallback_font, Vector2(TRACK_LEFT, y + 28.0), "WALL  " + str(required), TRACK_RIGHT - TRACK_LEFT, 80, YELLOW, INK, 6.0)
