@@ -44,7 +44,6 @@ func _ready() -> void:
 	_add_mode_button("A", BLUE, A_RECT, _open_a)
 	_add_mode_button("E", TEAL, E_RECT, _open_e)
 
-
 func _add_mode_button(letter: String, color: Color, rect: Rect2, cb: Callable) -> void:
 	var btn := Button.new()
 	btn.position = rect.position
@@ -77,16 +76,14 @@ func _add_mode_button(letter: String, color: Color, rect: Rect2, cb: Callable) -
 	letter_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(letter_l)
 
-
 func _open_a() -> void:
+	Engine.set_meta("a_level", 0)
 	get_tree().change_scene_to_file("res://ModeA.tscn")
-
 
 func _open_e() -> void:
 	Engine.set_meta("e_level", 0)
 	Engine.set_meta("e_endless", false)
 	get_tree().change_scene_to_file("res://ModeE.tscn")
-
 
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
@@ -98,14 +95,12 @@ func _gui_input(event: InputEvent) -> void:
 		if st.pressed:
 			_tap_at(st.position)
 
-
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_A or event.keycode == KEY_1:
 			_open_a()
 		elif event.keycode == KEY_E or event.keycode == KEY_2:
 			_open_e()
-
 
 func _tap_at(pos: Vector2) -> void:
 	if A_RECT.has_point(pos):
