@@ -45,9 +45,9 @@ const camera = new THREE.PerspectiveCamera(44, 1, .1, 180);
 camera.position.set(0, 6.4, 15);
 camera.lookAt(0, 0, -22);
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0xb6c4d4, 2.2));
-const sun = new THREE.DirectionalLight(0xffffff, 3.2);
-sun.position.set(8, 13, 9);
+scene.add(new THREE.HemisphereLight(0xf8fbff, 0x91a0b3, 1.65));
+const sun = new THREE.DirectionalLight(0xfff8ed, 2.65);
+sun.position.set(8, 16, 10);
 sun.castShadow = true;
 sun.shadow.mapSize.set(1024, 1024);
 sun.shadow.camera.left = -11;
@@ -387,6 +387,8 @@ function finish(won) {
   failActions.classList.toggle('hidden', won);
   winActions.classList.toggle('hidden', !won);
   nextButton.textContent = currentLevel === 8 ? 'MENU' : 'NEXT';
+  overlay.classList.toggle('result-win', won);
+  overlay.classList.toggle('result-fail', !won);
   overlay.classList.add('show');
 }
 
