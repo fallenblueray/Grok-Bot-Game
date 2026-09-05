@@ -201,40 +201,91 @@ func _finish(success: bool, reason: String) -> void:
 	end_overlay.mouse_filter = Control.MOUSE_FILTER_STOP
 	end_overlay.gui_input.connect(_on_overlay_gui_input)
 	add_child(end_overlay)
+
 	var result := Label.new()
 	var body := "WIN" if success else "FAIL"
 	if not success and reason != "":
 		body += "\n" + reason
-	body += "\n\nTAP"
+	if not success:
+		body += "\n\nTAP"
 	result.text = body
 	result.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	result.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	result.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	if success:
+		result.offset_bottom = -280.0
 	result.add_theme_font_size_override("font_size", 72)
 	result.add_theme_color_override("font_color", GREEN if success else RED)
 	result.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	end_overlay.add_child(result)
+
+	if success:
+		_add_end_button("NEXT", GREEN, Rect2(110, 1180, 860, 180), _goto_next)
+		_add_end_button("MENU", Color("3B82F6"), Rect2(110, 1400, 860, 160), _goto_menu)
 	queue_redraw()
 
 
+func _add_end_button(letter: String, color: Color, rect: Rect2, cb: Callable) -> void:
+	var btn := Button.new()
+	btn.position = rect.position
+	btn.size = rect.size
+	btn.flat = true
+	btn.focus_mode = Control.FOCUS_NONE
+	btn.text = ""
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = color
+	sb.corner_radius_top_left = 24
+	sb.corner_radius_top_right = 24
+	sb.corner_radius_bottom_left = 24
+	sb.corner_radius_bottom_right = 24
+	btn.add_theme_stylebox_override("normal", sb)
+	var sb_h := sb.duplicate() as StyleBoxFlat
+	sb_h.bg_color = color.lightened(0.12)
+	btn.add_theme_stylebox_override("hover", sb_h)
+	btn.add_theme_stylebox_override("pressed", sb_h)
+	btn.pressed.connect(cb)
+	end_overlay.add_child(btn)
+	var letter_l := Label.new()
+	letter_l.text = letter
+	letter_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	letter_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	letter_l.position = Vector2.ZERO
+	letter_l.size = rect.size
+	letter_l.add_theme_font_size_override("font_size", 56)
+	letter_l.add_theme_color_override("font_color", Color.WHITE)
+	letter_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	btn.add_child(letter_l)
+
+
 func _on_overlay_gui_input(event: InputEvent) -> void:
-	if ended and _pressed_event(event):
-		_restart()
+	# FAIL: whole overlay TAP restarts. WIN: only NEXT / MENU buttons.
+	if ended and not won and _pressed_event(event):
+		_restart_same()
 
 
-func _restart() -> void:
-	if won:
-		Engine.set_meta("a_level", (level_index + 1) % LEVEL_NUMBERS.size())
-	else:
-		Engine.set_meta("a_level", level_index)
+func _restart_same() -> void:
+	Engine.set_meta("a_level", level_index)
 	get_tree().reload_current_scene()
+
+
+func _goto_next() -> void:
+	if level_index >= LEVEL_NUMBERS.size() - 1:
+		_goto_menu()
+		return
+	Engine.set_meta("a_level", level_index + 1)
+	get_tree().reload_current_scene()
+
+
+func _goto_menu() -> void:
+	Engine.set_meta("a_open_select", true)
+	get_tree().change_scene_to_file("res://Boot.tscn")
 
 
 func _input(event: InputEvent) -> void:
 	if ended:
-		if _pressed_event(event):
+		if not won and _pressed_event(event):
 			get_viewport().set_input_as_handled()
-			_restart()
+			_restart_same()
 		return
 	if event is InputEventKey:
 		var key := event as InputEventKey
