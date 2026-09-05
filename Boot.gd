@@ -1,12 +1,13 @@
 extends Control
-## Boot — E is the game. D is a corpse (KEY_D still opens it).
+## Boot menu — A is the multiplier gate runner. E remains an optional warehouse mode.
 
 const INK := Color("1C1C1C")
 const BG := Color("F4E8D0")
-const CORAL := Color("E85D4C")
+const BLUE := Color("3B82F6")
 const TEAL := Color("2A9D8F")
-const MUSTARD := Color("E9C46A")
 
+const A_RECT := Rect2(110, 820, 860, 320)
+const E_RECT := Rect2(260, 1220, 560, 160)
 
 func _ready() -> void:
 	mouse_filter = Control.MOUSE_FILTER_STOP
@@ -26,14 +27,22 @@ func _ready() -> void:
 	title.offset_bottom = 400.0
 	title.add_theme_font_size_override("font_size", 72)
 	title.add_theme_color_override("font_color", INK)
+	title.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(title)
 
-	_add_mode_button(
-		"E",
-		TEAL,
-		Rect2(110, 820, 860, 320),
-		_open_e
-	)
+	var subtitle := Label.new()
+	subtitle.text = "MULTIPLIER GATE RUNNER"
+	subtitle.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	subtitle.set_anchors_preset(Control.PRESET_TOP_WIDE)
+	subtitle.offset_top = 420.0
+	subtitle.offset_bottom = 470.0
+	subtitle.add_theme_font_size_override("font_size", 26)
+	subtitle.add_theme_color_override("font_color", INK.darkened(0.2))
+	subtitle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	add_child(subtitle)
+
+	_add_mode_button("A", BLUE, A_RECT, _open_a)
+	_add_mode_button("E", TEAL, E_RECT, _open_e)
 
 
 func _add_mode_button(letter: String, color: Color, rect: Rect2, cb: Callable) -> void:
@@ -63,14 +72,14 @@ func _add_mode_button(letter: String, color: Color, rect: Rect2, cb: Callable) -
 	letter_l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	letter_l.position = Vector2.ZERO
 	letter_l.size = rect.size
-	letter_l.add_theme_font_size_override("font_size", 96)
+	letter_l.add_theme_font_size_override("font_size", 96 if letter == "A" else 48)
 	letter_l.add_theme_color_override("font_color", Color.WHITE)
 	letter_l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	btn.add_child(letter_l)
 
 
-func _open_d() -> void:
-	get_tree().change_scene_to_file("res://ModeD.tscn")
+func _open_a() -> void:
+	get_tree().change_scene_to_file("res://ModeA.tscn")
 
 
 func _open_e() -> void:
@@ -82,9 +91,8 @@ func _open_e() -> void:
 func _gui_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if not (mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT):
-			return
-		_tap_at(mb.position)
+		if mb.pressed and mb.button_index == MOUSE_BUTTON_LEFT:
+			_tap_at(mb.position)
 	elif event is InputEventScreenTouch:
 		var st := event as InputEventScreenTouch
 		if st.pressed:
@@ -93,12 +101,14 @@ func _gui_input(event: InputEvent) -> void:
 
 func _input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_D or event.keycode == KEY_1:
-			_open_d()
+		if event.keycode == KEY_A or event.keycode == KEY_1:
+			_open_a()
 		elif event.keycode == KEY_E or event.keycode == KEY_2:
 			_open_e()
 
 
 func _tap_at(pos: Vector2) -> void:
-	if Rect2(110, 820, 860, 320).has_point(pos):
+	if A_RECT.has_point(pos):
+		_open_a()
+	elif E_RECT.has_point(pos):
 		_open_e()

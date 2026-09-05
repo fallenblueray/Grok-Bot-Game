@@ -1,17 +1,13 @@
-# Grok Bot Game（Godot 4 原型）
+# Grok Bot Game (Godot 4)
 
-直向 1080×1920、單指點擊的兩個小遊戲：**D 抽層**、**E 相位咬合**。
+A portrait 1080×1920 prototype. **A is the game:** a multiplier-gate runner with levels 1, 4, and 8.
 
-## 如何開啟
+## Run
 
-1. 安裝 **Godot 4.7.2**（目前穩定版，https://godotengine.org/download ）。
-2. Godot → Import → 選 `project.godot` → **F5**。
+1. Install Godot 4.7.
+2. Import `project.godot` and press **F6** or **F5**.
+3. Select **A**, or press `A` / `1`.
 
-## 操作
+## How to play
 
-- 選單：點 **D**／**E**，或鍵盤 `D`／`1`、`E`／`2`。
-- 遊戲中：滑鼠左鍵或手指點。空白鍵／Enter 等同點擊。
-- **D**：點那一層。缺角＝裂縫，點到會倒。
-- **E**：整屏一點，對準 12 點鐘方向的窗。
-
-失敗或 90 秒到，再點一下重開同一關。
+Drag left or right to slide the swarm through the track. Gates change the population, saw bands and red tides remove beans, and the wall checks whether the swarm is large enough. On a clear, tap to advance; on a failure, tap to retry. The optional **E** mode remains available from the menu.
