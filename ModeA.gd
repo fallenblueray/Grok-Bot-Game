@@ -11,6 +11,7 @@ const GATE_WIDTH := 270.0
 const GATE_HEIGHT := 150.0
 const FIRST_EVENT_Y := -280.0
 const EVENT_SPACING := 480.0
+const TRACK_MID := 540.0
 
 const TRACK := Color("E8EEF5")
 const INK := Color("1C1C1C")
@@ -143,11 +144,10 @@ func _trigger_obstacle(obstacle: Dictionary) -> void:
 	if kind == "fork":
 		var left: Dictionary = obstacle["left"]
 		var right: Dictionary = obstacle["right"]
-		var left_x := 335.0
-		var right_x := 745.0
-		if absf(player_x - left_x) <= GATE_WIDTH * 0.55:
+		# Split the track: left half = left gate, right half = right gate (always pick one).
+		if player_x < TRACK_MID:
 			_apply_effect(left)
-		elif absf(player_x - right_x) <= GATE_WIDTH * 0.55:
+		else:
 			_apply_effect(right)
 		_check_wiped("WIPED")
 		return
@@ -314,6 +314,8 @@ func _draw_obstacle(obstacle: Dictionary) -> void:
 	if kind == "fork":
 		_draw_gate(obstacle["left"], 335.0, y)
 		_draw_gate(obstacle["right"], 745.0, y)
+		# Midline hint for which side counts.
+		draw_line(Vector2(TRACK_MID, y - 90.0), Vector2(TRACK_MID, y + 90.0), Color(INK, 0.35), 4.0)
 	elif kind == "gate" or kind == "fake":
 		_draw_gate(obstacle, 540.0, y)
 	elif kind == "saw":
