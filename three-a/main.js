@@ -133,7 +133,7 @@ function makeGate(label, z, operation, value) {
 function makeSaw(z) {
   const saw = new THREE.Group();
   const radius = 36 * U;
-  const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .48, radius * .48, depth = 10 * U, 24), redMaterial);
+  const hub = new THREE.Mesh(new THREE.CylinderGeometry(radius * .48, radius * .48, 10 * U, 24), redMaterial);
   hub.rotation.x = Math.PI / 2;
   hub.castShadow = true;
   saw.add(hub);
