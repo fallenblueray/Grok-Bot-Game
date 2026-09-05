@@ -332,7 +332,7 @@ func _draw_gate(gate: Dictionary, center_x: float, y: float) -> void:
 	var label := ""
 	var is_fake := str(gate["kind"]) == "fake"
 	if is_fake:
-		var label = str(gate["label"])
+		label = str(gate["label"])
 	else:
 		label = str(gate["op"]) + str(gate["value"])
 	draw_rect(rect, PALE_RED if tint == RED else PALE_GREEN, true)
