@@ -82,7 +82,7 @@ func _build_level(number: int) -> void:
 				_tide(12),
 				_gate("*", 3),
 				_saw(5),
-				_wall(60),
+				_wall(50),
 			]
 		8:
 			start_count = 10
@@ -332,7 +332,7 @@ func _draw_gate(gate: Dictionary, center_x: float, y: float) -> void:
 	var label := ""
 	var is_fake := str(gate["kind"]) == "fake"
 	if is_fake:
-		label = str(gate["label"])
+		var label = str(gate["label"])
 	else:
 		label = str(gate["op"]) + str(gate["value"])
 	draw_rect(rect, PALE_RED if tint == RED else PALE_GREEN, true)
